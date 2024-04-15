@@ -5,7 +5,9 @@ defmodule KvStore.LoadBalancer do
   require KvStore.GetRequest
   import KvStore.Utils
   import Emulation
+  import Kernel, except: [spawn: 3, spawn: 1, spawn_link: 1, spawn_link: 3, send: 2]
 
+  require Logger
   #Client should send messages to the LoadBalancer actor as messages with form
   #{:get, key} or {:put, key, object, context}.
   #The LoadBalancer actor will then route the requests to the appropriate servers
@@ -21,58 +23,44 @@ defmodule KvStore.LoadBalancer do
 
   @spec init([atom()], integer()) :: %KvStore.LoadBalancer{}
   def init(nodes, replication_factor) do
+    Logger.info("Initializing LoadBalancer with nodes: #{inspect(nodes)}")
     node_hashes = Enum.map(nodes, fn node -> {node, hash(node)} end) |> Enum.into(%{})
     %KvStore.LoadBalancer{
       sorted_nodes: Enum.sort_by(nodes, fn node -> node_hashes[node] end),
-      live_nodes: Enum.into(nodes, %{}),
+      live_nodes: MapSet.new(nodes),
       replication_factor: replication_factor,
       node_hashes: node_hashes
     }
   end
 
-  @spec receive(%KvStore.LoadBalancer{}) :: %KvStore.LoadBalancer{}
-  def receive(state) do
+  @spec run(%KvStore.LoadBalancer{}) :: %KvStore.LoadBalancer{}
+  def run(state) do
+    Logger.info("Starting LoadBalancer with state #{inspect(state)}")
     receive do
       {sender, {:get, key}} ->
-        {original_node, node} = consistent_hash(key, state.sorted_nodes)
-        node.send(KvStore.GetRequest.new(key, original_node, sender))
-        state
+        {original_node, node} = consistent_hash(key, state)
+        send(node, KvStore.GetRequest.new(key, sender, original_node))
+        run(state)
       {sender, {:put, key, object, context}} ->
-        {original_node, node} = consistent_hash(key, state.sorted_nodes)
-        node.send(KvStore.PutRequest.new(context, key, object, original_node, sender))
-        state
+        {original_node, node} = consistent_hash(key, state)
+        send(node, KvStore.PutRequest.new(key, object, context, sender, original_node))
+        run(state)
       {_, {:node_down, node}} ->
         state = %{state | live_nodes: MapSet.delete(state.live_nodes, node)}
-        state
+        run(state)
       {_, {:node_up, node}} ->
         state = %{state | live_nodes: MapSet.put(state.live_nodes, node)}
-        state
+        run(state)
+      {sender, :get_live_nodes} ->
+        sender |> send(state.live_nodes)
+        run(state)
+      unknown ->
+        Logger.error("LB Unknown message received: #{inspect(unknown)}")
+        run(state)
     end
   end
 
   @spec handle_call(any(), atom(), %KvStore.LoadBalancer{}) :: %KvStore.LoadBalancer{}
-  @spec handle_call(
-          {:get, binary()} | {:put, any(), pid(), binary()},
-          pid(),
-          atom()
-          | %{
-              :sorted_nodes => %{
-                live_nodes: MapSet.t(),
-                node_hashes: map(),
-                sorted_nodes: [atom()]
-              },
-              optional(any()) => any()
-            }
-        ) ::
-          atom()
-          | %{
-              :sorted_nodes => %{
-                live_nodes: MapSet.t(),
-                node_hashes: map(),
-                sorted_nodes: [atom()]
-              },
-              optional(any()) => any()
-            }
   def handle_call(message, sender, state) do
     case message do
       {:get, key} ->

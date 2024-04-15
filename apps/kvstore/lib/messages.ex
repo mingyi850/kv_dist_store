@@ -19,7 +19,8 @@ defmodule KvStore.GetRequest do
   defstruct(
     key: "",
     sender: nil,
-    original_recipient: nil
+    original_recipient: nil,
+    type: :get
   )
 
   @spec new(String.t(), pid(), pid()) :: %KvStore.GetRequest{}
@@ -27,7 +28,8 @@ defmodule KvStore.GetRequest do
     %KvStore.GetRequest{
       key: key,
       sender: sender,
-      original_recipient: original_recipient
+      original_recipient: original_recipient,
+      type: :get
     }
   end
 
@@ -40,18 +42,19 @@ defmodule KvStore.PutRequest do
     object: nil,
     context: nil,
     sender: nil,
-    original_recipient: nil
-
+    original_recipient: nil,
+    type: :put
   )
 
   @spec new(String.t(), any(), pid(), %KvStore.Context{}, pid()) :: %KvStore.PutRequest{}
-  def new(key, object, sender, context, original_recipient) do
+  def new(key, object, context, sender, original_recipient) do
     %KvStore.PutRequest{
       key: key,
       object: object,
       context: context,
       sender: sender,
-      original_recipient: original_recipient
+      original_recipient: original_recipient,
+      type: :put
     }
   end
 end
