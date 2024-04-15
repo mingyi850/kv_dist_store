@@ -1,0 +1,10 @@
+{application,kvstore,
+             [{optional_applications,[]},
+              {applications,[kernel,stdlib,elixir,logger,emulation,
+                             statistics]},
+              {description,"kvstore"},
+              {modules,['Elixir.Context','Elixir.GetRequest',
+                        'Elixir.KvDistStore','Elixir.LoadBalancer',
+                        'Elixir.PutRequest']},
+              {registered,[]},
+              {vsn,"0.1.0"}]}.
