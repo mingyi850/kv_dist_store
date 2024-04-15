@@ -1,5 +1,5 @@
 
-defmodule Kvstore.Utils do
+defmodule KvStore.Utils do
   def hash(value) do
     value
     |> to_string()

@@ -1,0 +1,39 @@
+# Compiled output
+/_build/
+/deps/
+
+# Dependency files
+/elixir_ls/
+/.elixir_ls/
+
+# Documentation
+/doc/
+
+# Compiled artifacts
+/ebin/
+/_build/
+
+# Mix release builds
+/rel/
+
+# Environment variables
+/.env
+
+# Editor/IDE files
+/.idea/
+/.vscode/
+/.emacs
+/.vimrc
+
+# Test artifacts
+/.cover/
+/.hexpm/
+/.hex/
+/.rebar/
+/.dialyzer/
+/.plt/
+/.elixir_ls/
+/.credo/
+/.eunit/
+/.swo
+/.swp

@@ -3,8 +3,9 @@
               {applications,[kernel,stdlib,elixir,logger,emulation,
                              statistics]},
               {description,"kvstore"},
-              {modules,['Elixir.Context','Elixir.GetRequest',
-                        'Elixir.Kvstore.Utils','Elixir.LoadBalancer',
-                        'Elixir.Node','Elixir.PutRequest']},
+              {modules,['Elixir.KvStore','Elixir.KvStore.Context',
+                        'Elixir.KvStore.GetRequest',
+                        'Elixir.KvStore.LoadBalancer',
+                        'Elixir.KvStore.PutRequest','Elixir.KvStore.Utils']},
               {registered,[]},
               {vsn,"0.1.0"}]}.
