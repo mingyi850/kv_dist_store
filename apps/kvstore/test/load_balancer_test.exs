@@ -12,7 +12,7 @@ defmodule LoadBalancerTest do
 
   require Logger
 
-  test "Load balancer distributes loads based on hash" do
+  test "Load balancer distributes commands based on hash" do
     Emulation.init()
     Emulation.append_fuzzers([Fuzzers.delay(2)])
 
@@ -34,6 +34,43 @@ defmodule LoadBalancerTest do
         third = KvStore.TestClient.testClientSend("key142", :lb)
         Logger.info("Got third as #{inspect(third)}")
         assert first != second || first != third
+      end)
+    handle = Process.monitor(client)
+
+    #Timeout.
+    receive do
+      {:DOWN, ^handle, _, _, _} -> true
+    after
+      10_000 -> assert false
+    end
+  after
+    Emulation.terminate()
+  end
+
+  test "Load balancer responds to nodes going up and down" do
+    Emulation.init()
+    Emulation.append_fuzzers([Fuzzers.delay(2)])
+
+    base_config =
+      KvStore.LoadBalancer.init([:a, :b, :c], 1)
+    Logger.info("Base config: #{inspect(base_config)}")
+    spawn(:lb, fn -> KvStore.LoadBalancer.run(base_config) end)
+    spawn(:a, fn -> KvStore.TestClient.kvStub() end)
+    spawn(:b, fn -> KvStore.TestClient.kvStub() end)
+    spawn(:c, fn -> KvStore.TestClient.kvStub() end)
+
+    Logger.info("Spawned all nodes")
+    client =
+      spawn(:client, fn ->
+        first = KvStore.TestClient.testClientSend("key1", :lb)
+        Logger.info("Got first as #{inspect(first)}")
+        send(:lb, {:node_down, first})
+        second = KvStore.TestClient.testClientSend("key1", :lb)
+        Logger.info("Got second as #{inspect(second)}")
+        send(:lb, {:node_up, first})
+        third = KvStore.TestClient.testClientSend("key1", :lb)
+        assert first != second
+        assert first == third
       end)
     handle = Process.monitor(client)
 
