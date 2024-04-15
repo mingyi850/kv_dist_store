@@ -4,7 +4,7 @@
                              statistics]},
               {description,"kvstore"},
               {modules,['Elixir.Context','Elixir.GetRequest',
-                        'Elixir.Kvstore.Utils','Elixir.LoadBalancer',
-                        'Elixir.Node','Elixir.PutRequest']},
+                        'Elixir.KvDistStore','Elixir.LoadBalancer',
+                        'Elixir.PutRequest']},
               {registered,[]},
               {vsn,"0.1.0"}]}.
