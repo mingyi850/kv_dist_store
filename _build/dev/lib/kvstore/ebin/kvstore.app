@@ -5,7 +5,9 @@
               {description,"kvstore"},
               {modules,['Elixir.KvStore','Elixir.KvStore.Context',
                         'Elixir.KvStore.GetRequest',
+                        'Elixir.KvStore.GetResponse',
                         'Elixir.KvStore.LoadBalancer',
-                        'Elixir.KvStore.PutRequest','Elixir.KvStore.Utils']},
+                        'Elixir.KvStore.PutRequest',
+                        'Elixir.KvStore.PutResponse','Elixir.KvStore.Utils']},
               {registered,[]},
               {vsn,"0.1.0"}]}.

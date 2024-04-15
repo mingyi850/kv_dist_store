@@ -27,11 +27,11 @@ defmodule LoadBalancerTest do
     Logger.info("Spawned all nodes")
     client =
       spawn(:client, fn ->
-        first = KvStore.TestClient.testClientSend("key1", :lb)
+        first = KvStore.TestClient.testClientSend({:get, "key1"}, :lb)
         Logger.info("Got first as #{inspect(first)}")
-        second = KvStore.TestClient.testClientSend("key3123", :lb)
+        second = KvStore.TestClient.testClientSend({:get, "key2"}, :lb)
         Logger.info("Got second as #{inspect(second)}")
-        third = KvStore.TestClient.testClientSend("key142", :lb)
+        third = KvStore.TestClient.testClientSend({:get, "key3"}, :lb)
         Logger.info("Got third as #{inspect(third)}")
         assert first != second || first != third
       end)
@@ -62,13 +62,13 @@ defmodule LoadBalancerTest do
     Logger.info("Spawned all nodes")
     client =
       spawn(:client, fn ->
-        first = KvStore.TestClient.testClientSend("key1", :lb)
+        first = KvStore.TestClient.testClientSend({:get, "key1"}, :lb)
         Logger.info("Got first as #{inspect(first)}")
         send(:lb, {:node_down, first})
-        second = KvStore.TestClient.testClientSend("key1", :lb)
+        second = KvStore.TestClient.testClientSend({:get, "key1"}, :lb)
         Logger.info("Got second as #{inspect(second)}")
         send(:lb, {:node_up, first})
-        third = KvStore.TestClient.testClientSend("key1", :lb)
+        third = KvStore.TestClient.testClientSend({:get, "key1"}, :lb)
         assert first != second
         assert first == third
       end)

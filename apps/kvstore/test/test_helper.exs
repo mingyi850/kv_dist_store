@@ -4,17 +4,20 @@ defmodule KvStore.TestClient do
   import Emulation, only: [spawn: 2, send: 2, whoami: 0]
 
   require Logger
-  def testClientSend(key, target) do
+  def testClientSend(msg, target) do
     IO.puts("Starting test client")
-    send(target, {:get, key})
-    IO.puts("Sent message {:get, #{key}} to #{inspect(target)}")
+    send(target, msg)
+    IO.puts("Sent message #{inspect(msg)} to #{inspect(target)}")
     receive do
       {sender, :ok} ->
         Logger.info("TestClient received ok")
         sender
+      {sender, response} ->
+        Logger.info("TestClient received response #{inspect(response)}")
+        response
       anything ->
         Logger.error("TestClient received unknown message #{inspect(anything)}")
-        testClientSend(key, target)
+        testClientSend(msg, target)
     end
   end
 
