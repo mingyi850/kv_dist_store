@@ -1,5 +1,6 @@
 # Distributed Systems Final Project
 ## Comparison and Analysis of Weak Consistency in Key Value Stores
+
 ## Summary
 Our project aims to implement such a weakly consistent datastore using concepts from Dynamo DB (Which also underpin Cassandra and Scylla DB) such as gossip protocols, anti-entropy and vector clocks to exchange information on members and operations.
 ## Contents
