@@ -17,24 +17,32 @@ defmodule KvStore do
     sorted_nodes: [],
     live_nodes: {},
     replication_factor: 1,
+    read_quorum: 1,
+    write_quorum: 1,
     node_hashes: %{},
     clock: %{},
-    data: %{}
+    data: %{},
+    pending_requests: %{},
+    alternate_data: %{}
   )
   @moduledoc """
   Documentation for `KvStore`.
   """
 
-  @spec init([atom()], integer()) :: %KvStore{}
-  def init(nodes, replication_factor) do
+  @spec init([atom()], integer(), integer(), integer()) :: %KvStore{}
+  def init(nodes, replication_factor, read_quorum, write_quorum) do
     node_hashes = Enum.map(nodes, fn node -> {node, hash(node)} end) |> Enum.into(%{})
     %KvStore{
       sorted_nodes: Enum.sort_by(nodes, fn node -> node_hashes[node] end),
       live_nodes: MapSet.new(nodes),
       replication_factor: replication_factor,
+      read_quorum: read_quorum,
+      write_quorum: write_quorum,
       node_hashes: node_hashes,
       clock: %{whoami() => 0},
-      data: %{}
+      data: %{},
+      pending_requests: %{},
+      alternate_data: %{}
     }
   end
 

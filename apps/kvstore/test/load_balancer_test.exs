@@ -15,7 +15,6 @@ defmodule LoadBalancerTest do
   test "Load balancer distributes commands based on hash" do
     Emulation.init()
     Emulation.append_fuzzers([Fuzzers.delay(2)])
-
     base_config =
       KvStore.LoadBalancer.init([:a, :b, :c], 1)
     Logger.info("Base config: #{inspect(base_config)}")

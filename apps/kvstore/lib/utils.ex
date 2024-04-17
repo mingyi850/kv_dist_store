@@ -9,7 +9,7 @@ defmodule KvStore.Utils do
     |> rem(360)
   end
 
-  # Get the next node (should be used when requests to the original node fail)
+  # Get the next valid node in a sorted node
   @spec get_next_node(atom(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}) :: atom()
   def get_next_node(node, state) do
     node_index = Enum.find_index(state.sorted_nodes, fn n -> n == node end)
@@ -21,6 +21,11 @@ defmodule KvStore.Utils do
     else
       get_next_node(next_node, state)
     end
+  end
+
+  @spec get_next_nodes(atom(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}, integer()) :: [atom()]
+  def get_next_nodes(node, state, num_nodes) do
+    Enum.reduce(1..num_nodes, [node], fn _, acc -> [get_next_node(Enum.at(acc, -1), state) | acc] end)
   end
 
   @spec consistent_hash(any(), %{sorted_nodes: [atom()], node_hashes: map(), live_nodes: MapSet.t(atom())}) ::

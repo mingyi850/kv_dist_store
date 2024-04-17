@@ -17,7 +17,7 @@ defmodule KvStoreTest do
     Emulation.append_fuzzers([Fuzzers.delay(2)])
 
     base_config =
-      KvStore.init([:a, :b, :c], 1)
+      KvStore.init([:a, :b, :c], 1, 1, 1)
 
     spawn(:a, fn -> KvStore.run(base_config) end)
 
