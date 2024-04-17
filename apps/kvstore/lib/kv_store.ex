@@ -18,7 +18,7 @@ defmodule KvStore do
     live_nodes: {},
     replication_factor: 1,
     node_hashes: %{},
-    clock: 0,
+    clock: %{},
     data: %{}
   )
   @moduledoc """
@@ -33,7 +33,7 @@ defmodule KvStore do
       live_nodes: MapSet.new(nodes),
       replication_factor: replication_factor,
       node_hashes: node_hashes,
-      clock: 0,
+      clock: %{whoami() => 0},
       data: %{}
     }
   end
@@ -41,6 +41,7 @@ defmodule KvStore do
 
   @spec run(%KvStore{}) :: %KvStore{}
   def run(state) do
+    state = %{state | clock: update_vector_clock(whoami(), state.clock)}
     receive do
       {_, %KvStore.GetRequest{} = request} ->
         state = handle_get_request(state, request)
@@ -70,20 +71,21 @@ defmodule KvStore do
 
   @spec handle_put_request(%KvStore{}, %KvStore.PutRequest{}) :: %KvStore{}
   def handle_put_request(state, request) do
-    request = handle_nil_context(state, request)
+    request = update_request_clock(state, request)
     state = %{state | data: Map.put(state.data, request.key, KvStore.CacheEntry.new(request.object, request.context))}
     send(request.sender, KvStore.PutResponse.new(request.context)) #Will need to change with new vector clock
     state
   end
 
-  defp handle_nil_context(state, request) do
+  defp update_request_clock(state, request) do
     if request.context != nil do
-      request
+      %{request | context: combine_vector_clocks(state.clock, request.context.vector_clock)}
     else
       new_context = KvStore.Context.new()
-      new_context = %{new_context | vector_clock: Map.put(new_context.vector_clock, whoami(), state.clock)}
+      new_context = %{new_context | vector_clock: state.clock}
       request = %{request | context: new_context}
       request
     end
   end
+
 end

@@ -54,7 +54,11 @@ defmodule KvStore.Utils do
   """
   @spec combine_vector_clocks(map(), map()) :: map()
   def combine_vector_clocks(current, received) do
-    Map.merge(current, received, fn _k, c, r -> combine_component(c, r) end)
+    if received == nil do
+      current
+    else
+      Map.merge(current, received, fn _k, c, r -> combine_component(c, r) end)
+    end
   end
 
    @doc """
@@ -103,10 +107,6 @@ defmodule KvStore.Utils do
     # First make the vectors equal length.
     v1 = make_vectors_equal_length(v1, v2)
     v2 = make_vectors_equal_length(v2, v1)
-    # `compare_result` is a list of elements from
-    # calling `compare_component` on each component of
-    # `v1` and `v2`. Given this list you need to figure
-    # out whether
     compare_result =
       Map.values(
         Map.merge(v1, v2, fn _k, c1, c2 -> compare_component(c1, c2) end)
