@@ -26,7 +26,7 @@ defmodule KvStore.LoadBalancer do
     Logger.info("Initializing LoadBalancer with nodes: #{inspect(nodes)}")
     node_hashes = Enum.map(nodes, fn node -> {node, hash(node)} end) |> Enum.into(%{})
     %KvStore.LoadBalancer{
-      sorted_nodes: Enum.sort_by(nodes, fn node -> node_hashes[node] end),
+      sorted_nodes: sort_nodes(nodes),
       live_nodes: MapSet.new(nodes),
       replication_factor: replication_factor,
       node_hashes: node_hashes

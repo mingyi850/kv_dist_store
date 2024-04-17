@@ -9,36 +9,57 @@ defmodule KvStore.Utils do
     |> rem(360)
   end
 
-  # Get the next valid node in a sorted node
-  @spec get_next_node(atom(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}) :: atom()
-  def get_next_node(node, state) do
-    node_index = Enum.find_index(state.sorted_nodes, fn n -> n == node end)
-    next_index = rem(node_index + 1, length(state.sorted_nodes))
-    next_node = Enum.at(state.sorted_nodes, next_index)
-    # Check if next node is valid, otherwise, return the following node
-    if Map.has_key?(state.live_nodes, next_node) do
-      next_node
+  @spec sort_nodes([atom()]) :: [atom()]
+  def sort_nodes(nodes) do
+    Enum.sort_by(nodes, fn node -> hash(node) end)
+  end
+
+  @spec get_next_node(integer(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}, integer()) :: {atom(), integer()}
+  def get_next_node(index, state, count) do
+    if count == 0 do
+      {nil, index}
     else
-      get_next_node(next_node, state)
+      next_index = rem(index + 1, length(state.sorted_nodes))
+      next_node = Enum.at(state.sorted_nodes, next_index)
+      Logger.debug("Next node is #{next_node}, with Index #{next_index}")
+      # Check if next node is valid, otherwise, return the following node
+      if MapSet.member?(state.live_nodes, next_node) do
+        {next_node, next_index}
+      else
+        get_next_node(next_index, state, count - 1)
+      end
     end
   end
 
-  @spec get_next_nodes(atom(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}, integer()) :: [atom()]
-  def get_next_nodes(node, state, num_nodes) do
-    Enum.reduce(1..num_nodes, [node], fn _, acc -> [get_next_node(Enum.at(acc, -1), state) | acc] end)
+  @spec get_next_nodes(integer(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}, integer(), [atom()]) :: [atom()]
+  def get_next_nodes(index, state, num_nodes, accum) do
+    if num_nodes == 0 do
+      Enum.reverse(accum)
+    else
+      {next_node, next_index} = get_next_node(index, state, MapSet.size(state.live_nodes))
+      get_next_nodes(next_index, state, num_nodes - 1, [next_node | accum])
+    end
+
   end
 
   @spec consistent_hash(any(), %{sorted_nodes: [atom()], node_hashes: map(), live_nodes: MapSet.t(atom())}) ::
             {any(), any()}
   def consistent_hash(key, state) do
     key_hash = hash(key)
-    Logger.info("Hash for key #{key} is #{key_hash}")
+    Logger.debug("Hash for key #{key} is #{key_hash}")
     sorted_nodes = state.sorted_nodes
     # Show all nodes with higher hash value
-    Enum.each(sorted_nodes, fn node -> if state.node_hashes[node] >= key_hash do Logger.info("Node #{node} has hash #{state.node_hashes[node]}") end end)
     original_node = Enum.find(sorted_nodes, fn node -> (state.node_hashes[node] >= key_hash) end) || hd(sorted_nodes)
     node = Enum.find(sorted_nodes, fn node -> (state.node_hashes[node] >= key_hash) && MapSet.member?(state.live_nodes, node) end) || hd(sorted_nodes)
     {original_node, node}
+  end
+
+
+
+  @spec get_preference_list(atom(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}, integer()) :: [atom()]
+  def get_preference_list(key, state, num_nodes) do
+    {_, node} = consistent_hash(key, state)
+    get_next_nodes(Enum.find_index(state.sorted_nodes, fn n -> n == node end), state, num_nodes - 1, [node])
   end
 
 

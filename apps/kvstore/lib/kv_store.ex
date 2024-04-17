@@ -33,7 +33,7 @@ defmodule KvStore do
   def init(nodes, replication_factor, read_quorum, write_quorum) do
     node_hashes = Enum.map(nodes, fn node -> {node, hash(node)} end) |> Enum.into(%{})
     %KvStore{
-      sorted_nodes: Enum.sort_by(nodes, fn node -> node_hashes[node] end),
+      sorted_nodes: sort_nodes(nodes),
       live_nodes: MapSet.new(nodes),
       replication_factor: replication_factor,
       read_quorum: read_quorum,
