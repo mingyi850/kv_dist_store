@@ -1,4 +1,3 @@
-
 defmodule KvStore.Utils do
   require Logger
 
@@ -24,8 +23,8 @@ defmodule KvStore.Utils do
     end
   end
 
-@spec consistent_hash(any(), %{sorted_nodes: [atom()], node_hashes: map(), live_nodes: MapSet.t(atom())}) ::
-          {any(), any()}
+  @spec consistent_hash(any(), %{sorted_nodes: [atom()], node_hashes: map(), live_nodes: MapSet.t(atom())}) ::
+            {any(), any()}
   def consistent_hash(key, state) do
     key_hash = hash(key)
     Logger.info("Hash for key #{key} is #{key_hash}")
@@ -36,10 +35,10 @@ defmodule KvStore.Utils do
     node = Enum.find(sorted_nodes, fn node -> (state.node_hashes[node] >= key_hash) && MapSet.member?(state.live_nodes, node) end) || hd(sorted_nodes)
     {original_node, node}
   end
-end
 
-# Vector clock utils
- # Combine a single component in a vector clock.
+
+  # Vector clock utils
+  # Combine a single component in a vector clock.
   @spec combine_component(
           non_neg_integer(),
           non_neg_integer()
@@ -120,3 +119,4 @@ end
       true -> @concurrent
     end
   end
+end
