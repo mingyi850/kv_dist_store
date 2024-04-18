@@ -45,4 +45,39 @@ defmodule KvStoreTest do
   after
     Emulation.terminate()
   end
+
+  test "KV Store receives and processes updates from any coordinator node" do
+    Emulation.init()
+    Emulation.append_fuzzers([Fuzzers.delay(2)])
+
+    nodes = [:a, :b, :c, :d, :e]
+    base_config =
+      KvStore.init(nodes, 3, 2, 2)
+
+    nodes |> Enum.each(fn node -> spawn(node, fn -> KvStore.run(base_config) end) end)
+
+    client =
+      spawn(:client, fn ->
+        first = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a), :b)
+        Logger.info("Got first as #{inspect(first)}")
+        assert first.objects == []
+        second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new("key1", 123, [], :client, :a), :a)
+        Logger.info("Got second as #{inspect(second)}")
+        assert second.context != nil
+        third = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a), :c)
+        Logger.info("Got third as #{inspect(third)}")
+        assert third.objects != []
+        assert hd(third.objects).object == 123
+      end)
+    handle = Process.monitor(client)
+
+    #Timeout.
+    receive do
+      {:DOWN, ^handle, _, _, _} -> true
+    after
+      10_000 -> assert false
+    end
+  after
+    Emulation.terminate()
+  end
 end

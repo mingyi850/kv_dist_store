@@ -150,21 +150,9 @@ alias KvStore.GetResponse
       appended_responses = Map.put(existing_responses, sender, response.response)
       state = %{state | request_responses: Map.put(state.request_responses, response.index, appended_responses)}
       response_count = map_size(appended_responses)
-      cond do
-        response_count == state.read_quorum ->
-          handle_get_response_quorum(state, request, response.index)
-        response_count > state.read_quorum ->
-          combined_response = Map.get(state.read_repairs, response.index, nil)
-          if combined_response != nil  and is_response_stale(response.response, combined_response) do
-            read_repair_request = KvStore.ReadRepairRequest.new(request.request.key, combined_response)
-            send(sender, read_repair_request)
-          end
-          if response_count == state.replication_factor do
-            remove_request(state, response.index)
-          else
-            state
-          end
-      end
+      handle_get_response_quorum(state, request, response.index, response_count)
+      |> handle_send_read_repair(response, response_count, sender)
+      |> handle_all_response_complete(response.index, response_count)
     else
       Logger.warning("#{inspect(whoami())} Received response for request: #{inspect(response.index)}, but request not found.")
       state
@@ -255,21 +243,49 @@ alias KvStore.GetResponse
     end
   end
 
-  @spec handle_get_response_quorum(%KvStore{}, %KvStore.InternalGetRequest{}, integer()) :: %KvStore{}
-  def handle_get_response_quorum(state, request, index) do
+  @spec handle_get_response_quorum(%KvStore{}, %KvStore.InternalGetRequest{}, integer(), integer()) :: %KvStore{}
+  def handle_get_response_quorum(state, request, index, response_count) do
     Logger.debug("#{inspect(whoami())} Handling get response quorum for request: #{inspect(request)}")
-    responses = Map.get(state.request_responses, index, %{})
-    combined_response = get_updated_responses(responses)
-    stale_nodes = get_stale_nodes(responses, combined_response)
-    # TODO: Should send stale_nodes ReadRepairRequest with combined_response
-    read_repair_request = KvStore.ReadRepairRequest.new(request.request.key, combined_response)
-    broadcast(stale_nodes, read_repair_request)
-    send(request.request.sender, combined_response)
-    %{state |
-      request_responses: Map.delete(state.request_responses, index),
-      pending_requests: Map.delete(state.pending_requests, index),
-      read_repairs: Map.put(state.read_repairs, index, combined_response)}
+    if response_count == state.read_quorum do
+        responses = Map.get(state.request_responses, index, %{})
+        combined_response = get_updated_responses(responses)
+        stale_nodes = get_stale_nodes(responses, combined_response)
+        # TODO: Should send stale_nodes ReadRepairRequest with combined_response
+        read_repair_request = KvStore.ReadRepairRequest.new(request.request.key, combined_response)
+        broadcast(stale_nodes, read_repair_request)
+        send(request.request.sender, combined_response)
+        %{state |
+          request_responses: Map.delete(state.request_responses, index),
+          pending_requests: Map.delete(state.pending_requests, index),
+          read_repairs: Map.put(state.read_repairs, index, combined_response)
+        }
+    else
+      state
+    end
   end
+
+  @spec handle_send_read_repair(%KvStore{}, %KvStore.InternalGetResponse{}, integer(), atom()) :: %KvStore{}
+  def handle_send_read_repair(state, response, response_count, sender) do
+    pending_request = Map.get(state.pending_requests, response.index, nil)
+    if response_count > state.read_quorum do
+      combined_response = Map.get(state.read_repairs, response.index, nil)
+      if combined_response != nil  and is_response_stale(response.response, combined_response) do
+        read_repair_request = KvStore.ReadRepairRequest.new(pending_request.request.key, combined_response)
+        send(sender, read_repair_request)
+      end
+    end
+    state
+  end
+
+  @spec handle_all_response_complete(%KvStore{}, integer(), integer()) :: %KvStore{}
+  def handle_all_response_complete(state, index, response_count) do
+    if response_count == state.replication_factor do
+      remove_request(state, index)
+    else
+      state
+    end
+  end
+
 
 
   # Identify nodes which returned stale responses and need to be updated based on the newly constructed request
@@ -361,7 +377,4 @@ alias KvStore.GetResponse
       timers: Map.delete(state.timers, index)
     }
   end
-
-
-
 end
