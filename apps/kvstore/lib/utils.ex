@@ -90,6 +90,15 @@ defmodule KvStore.Utils do
     end
   end
 
+  @doc """
+  Combine a list of vector clocks
+  """
+  @spec combine_vector_clocks([map()]) :: map()
+  def combine_vector_clocks([]), do: %{}
+  def combine_vector_clocks([clock | clocks]) do
+    combine_vector_clocks(clock, combine_vector_clocks(clocks))
+  end
+
    @doc """
   This function is called by the process `proc` whenever an
   event occurs.

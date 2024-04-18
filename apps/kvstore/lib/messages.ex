@@ -11,6 +11,13 @@ defmodule KvStore.Context do
       }
     end
 
+    @spec new(map()) :: %KvStore.Context{}
+    def new(vector_clock) do
+      %KvStore.Context{
+        vector_clock: vector_clock
+      }
+    end
+
 
 end
 
@@ -71,18 +78,18 @@ defmodule KvStore.PutRequest do
   defstruct(
     key: "",
     object: nil,
-    context: nil,
+    contexts: [],
     sender: nil,
     original_recipient: nil,
     type: :put
   )
 
-  @spec new(String.t(), any(), %KvStore.Context{}, pid(), pid()) :: %KvStore.PutRequest{}
-  def new(key, object, context, sender, original_recipient) do
+  @spec new(String.t(), any(), [%KvStore.Context{}], pid(), pid()) :: %KvStore.PutRequest{}
+  def new(key, object, contexts, sender, original_recipient) do
     %KvStore.PutRequest{
       key: key,
       object: object,
-      context: context,
+      contexts: contexts,
       sender: sender,
       original_recipient: original_recipient,
       type: :put
@@ -93,13 +100,15 @@ end
 defmodule KvStore.InternalPutRequest do
   defstruct(
     request: nil,
+    context: nil,
     index: 0
   )
 
-  @spec new(KvStore.PutRequest.t(), integer()) :: %KvStore.InternalPutRequest{}
-  def new(request, index) do
+  @spec new(KvStore.PutRequest.t(), %KvStore.Context{}, integer()) :: %KvStore.InternalPutRequest{}
+  def new(request, context, index) do
     %KvStore.InternalPutRequest{
       request: request,
+      context: context,
       index: index
     }
   end
@@ -148,6 +157,11 @@ defmodule KvStore.GetResponse do
         objects: entries,
         type: :get_response
       }
+    end
+
+    @spec get_contexts(%KvStore.GetResponse{}) :: [%KvStore.Context{}]
+    def get_contexts(response) do
+      Enum.map(response.objects, fn entry -> entry.context end)
     end
 end
 

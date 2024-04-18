@@ -26,7 +26,7 @@ defmodule KvStoreTest do
         first = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a), :a)
         Logger.info("Got first as #{inspect(first)}")
         assert first.objects == []
-        second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new("key1", 123, nil, :client, :a), :a)
+        second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new("key1", 123, [], :client, :a), :a)
         Logger.info("Got second as #{inspect(second)}")
         assert second.context != nil
         third = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a), :a)
