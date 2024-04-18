@@ -14,6 +14,7 @@ defmodule KvStore do
   import KvStore.CacheEntry
   import KvStore.InternalGetRequest
   import KvStore.InternalPutRequest
+  import KvStore.FailedResponse
 
   require Logger
 
@@ -28,8 +29,12 @@ defmodule KvStore do
     data: %{},
     pending_requests: %{},
     request_responses: %{},
+    read_repairs: %{},
     alternate_data: %{},
-    counter: 1
+    timers: %{},
+    counter: 1,
+    internal_timeout: 100,
+    max_retries: 3
   )
   @moduledoc """
   Documentation for `KvStore`.
@@ -49,7 +54,13 @@ alias KvStore.GetResponse
       clock: %{},
       data: %{},
       pending_requests: %{},
-      alternate_data: %{}
+      request_responses: %{},
+      read_repairs: %{},
+      alternate_data: %{},
+      timers: %{},
+      counter: 1,
+      internal_timeout: 100,
+      max_retries: 3
     }
   end
 
@@ -83,6 +94,9 @@ alias KvStore.GetResponse
         state = handle_put_response(state, response, sender)
         #Logger.info("Current state: #{inspect(state)}")
         run(state)
+      {_, {:timeout, index, retries}} ->
+        state = handle_timeout(state, index, retries)
+        run(state)
       {_, {:node_down, node}} ->
         state = %{state | live_nodes: MapSet.delete(state.live_nodes, node)}
         run(state)
@@ -96,9 +110,11 @@ alias KvStore.GetResponse
   def handle_get_request(state, request) do
     Logger.debug("Handling external get request: #{inspect(request)}")
     internal_request = KvStore.InternalGetRequest.new(request, state.counter)
+    timer = Emulation.timer(state.internal_timeout, {:timeout, state.counter, 1})
     state = %{state |
-      pending_requests: Map.put(state.pending_requests, state.counter, request),
+      pending_requests: Map.put(state.pending_requests, state.counter, internal_request),
       request_responses: Map.put(state.request_responses, state.counter, %{}),
+      timers: Map.put(state.timers, state.counter, timer),
       counter: state.counter + 1
     }
     preference_list = get_preference_list(request.key, state, state.replication_factor)
@@ -129,16 +145,26 @@ alias KvStore.GetResponse
       Logger.debug("#{inspect(whoami())} Received response for request: #{inspect(request)}, currently have #{map_size(existing_responses)} responses.")
       appended_responses = Map.put(existing_responses, sender, response.response)
       state = %{state | request_responses: Map.put(state.request_responses, response.index, appended_responses)}
-      state = if map_size(state.request_responses) >= state.read_quorum do
-        handle_get_response_quorum(state, request, response.index)
-      else state
+      response_count = map_size(appended_responses)
+      cond do
+        response_count == state.read_quorum ->
+          handle_get_response_quorum(state, request, response.index)
+        response_count > state.read_quorum ->
+          combined_response = Map.get(state.read_repairs, response.index, nil)
+          if combined_response != nil  and is_response_stale(response.response, combined_response) do
+            # TODO: Construct read repair response and send to stale node
+            # send(sender, read_repair_response)
+          end
+          if response_count == state.replication_factor do
+            remove_request(state, response.index)
+          else
+            state
+          end
       end
-      state
     else
       Logger.warning("#{inspect(whoami())} Received response for request: #{inspect(response.index)}, but request not found.")
       state
     end
-
   end
 
   @spec handle_put_request(%KvStore{}, %KvStore.PutRequest{}) :: %KvStore{}
@@ -146,14 +172,15 @@ alias KvStore.GetResponse
     updated_context = get_updated_context(state, request)
     preference_list = get_preference_list(request.key, state, state.replication_factor)
     internal_request = KvStore.InternalPutRequest.new(request, updated_context, state.counter)
+    timer = Emulation.timer(state.internal_timeout, {:timeout, state.counter, 1})
     KvStore.Utils.broadcast(preference_list, internal_request)
     %{state |
-      pending_requests: Map.put(state.pending_requests, state.counter, request),
+      pending_requests: Map.put(state.pending_requests, state.counter, internal_request),
       request_responses: Map.put(state.request_responses, state.counter, %{}),
+      timers: Map.put(state.timers, state.counter, timer),
       counter: state.counter + 1
     }
   end
-
 
   @spec handle_put_req_internal(%KvStore{}, %KvStore.InternalPutRequest{}, atom()) :: %KvStore{}
   def handle_put_req_internal(state, request, sender) do
@@ -178,24 +205,27 @@ alias KvStore.GetResponse
       Logger.debug("#{inspect(whoami())} Received response for request: #{inspect(request)}, currently have #{map_size(existing_responses)} responses.")
       appended_responses = Map.put(existing_responses, sender, response.response)
       state = %{state | request_responses: Map.put(state.request_responses, response.index, appended_responses)}
-      state = if map_size(appended_responses) >= state.write_quorum do
-        handle_put_response_quorum(state, request, response.index)
-      else state
+      cond do
+        map_size(appended_responses) == state.write_quorum ->
+          handle_put_response_quorum(state, request, response.index)
+        map_size(appended_responses) == state.replication_factor ->
+          remove_request(state, response.index)
+        true ->
+          state
       end
-      state
     else
       Logger.warning("#{inspect(whoami())} Received response for request: #{inspect(response.index)}, but request not found.")
       state
     end
   end
 
-  @spec handle_put_response_quorum(%KvStore{}, %KvStore.PutRequest{}, integer()) :: %KvStore{}
+  @spec handle_put_response_quorum(%KvStore{}, %KvStore.InternalPutRequest{}, integer()) :: %KvStore{}
   def handle_put_response_quorum(state, request, index) do
     Logger.debug("#{inspect(whoami())} Handling put response quorum for request: #{inspect(request)}")
     responses = Map.get(state.request_responses, index, %{})
     Logger.debug("Responses for request: #{inspect(responses)}")
     context = hd(Map.values(responses)).context
-    send(request.sender, KvStore.PutResponse.new(context))
+    send(request.request.sender, KvStore.PutResponse.new(context))
     %{state |
       request_responses: Map.delete(state.request_responses, index),
       pending_requests: Map.delete(state.pending_requests, index),
@@ -211,17 +241,23 @@ alias KvStore.GetResponse
     end
   end
 
-  @spec handle_get_response_quorum(%KvStore{}, %KvStore.GetRequest{}, integer()) :: %KvStore{}
+  @spec handle_get_response_quorum(%KvStore{}, %KvStore.InternalGetRequest{}, integer()) :: %KvStore{}
   def handle_get_response_quorum(state, request, index) do
     Logger.debug("#{inspect(whoami())} Handling get response quorum for request: #{inspect(request)}")
     responses = Map.get(state.request_responses, index, %{})
     combined_response = get_updated_responses(responses)
     stale_nodes = get_stale_nodes(responses, combined_response)
     # TODO: Should send stale_nodes ReadRepairRequest with combined_response
-    send(request.sender, combined_response)
+    send(request.request.sender, combined_response)
     %{state |
       request_responses: Map.delete(state.request_responses, index),
-      pending_requests: Map.delete(state.pending_requests, index)}
+      pending_requests: Map.delete(state.pending_requests, index),
+      read_repairs: Map.put(state.read_repairs, index, combined_response)}
+  end
+
+  @spec handle_get_response_complete(%KvStore{},  integer()) :: %KvStore{}
+  def handle_get_response_complete(state, index) do
+
   end
 
 
@@ -275,6 +311,44 @@ alias KvStore.GetResponse
       exclude_list = MapSet.union(exclude_list, MapSet.new(to_exclude))
       get_exclude_list(remaining, all_entries, exclude_list)
     end
+  end
+
+  @spec handle_timeout(%KvStore{}, integer(), integer()) :: %KvStore{}
+  def handle_timeout(state, index, retries) do
+    Logger.warning("#{inspect(whoami())} Timeout for request: #{inspect(index)}")
+    request = Map.get(state.pending_requests, index, nil)
+    if request != nil do
+      if retries >= state.max_retries do
+        Logger.warning("#{inspect(whoami())} Timeout for request: #{inspect(index)}, max retries reached.")
+        send(request.reqeust.sender, KvStore.FailedResponse.new(request.request))
+        state = remove_request(state, index)
+        state
+      else
+        responded_nodes = MapSet.new(Map.keys(Map.get(state.request_responses, index, %{}))) # Get a set of all nodes that have responded to this request
+        priority_list = get_preference_list(request.request.key, state, state.replication_factor)
+        remaining_nodes = priority_list |> Enum.filter(fn node -> !MapSet.member?(responded_nodes, node) end)
+        broadcast(remaining_nodes, request)
+        timer = Emulation.timer(state.internal_timeout, {:timeout, index, retries + 1})
+        %{state | timers: Map.put(state.timers, index, timer)}
+      end
+    else
+      Logger.warning("#{inspect(whoami())} Timeout for request: #{inspect(index)}, but request not found.")
+      state
+    end
+  end
+
+  @spec remove_request(%KvStore{}, integer()) :: %KvStore{}
+  def remove_request(state, index) do
+    timer = Map.get(state.timers, index, nil)
+    if timer != nil do
+      Emulation.cancel_timer(timer)
+    end
+    %{state |
+      pending_requests: Map.delete(state.pending_requests, index),
+      request_responses: Map.delete(state.request_responses, index),
+      read_repairs: Map.delete(state.read_repairs, index),
+      timers: Map.delete(state.timers, index)
+    }
   end
 
 

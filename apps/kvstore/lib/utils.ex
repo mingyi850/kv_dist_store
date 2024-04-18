@@ -24,7 +24,7 @@ defmodule KvStore.Utils do
     else
       next_index = rem(index + 1, length(state.sorted_nodes))
       next_node = Enum.at(state.sorted_nodes, next_index)
-      Logger.debug("Next node is #{next_node}, with Index #{next_index}")
+      #Logger.debug("Next node is #{next_node}, with Index #{next_index}")
       # Check if next node is valid, otherwise, return the following node
       if MapSet.member?(state.live_nodes, next_node) do
         {next_node, next_index}
@@ -49,7 +49,7 @@ defmodule KvStore.Utils do
             {any(), any()}
   def consistent_hash(key, state) do
     key_hash = hash(key)
-    Logger.debug("Hash for key #{key} is #{key_hash}")
+    #Logger.debug("Hash for key #{key} is #{key_hash}")
     sorted_nodes = state.sorted_nodes
     # Show all nodes with higher hash value
     original_node = Enum.find(sorted_nodes, fn node -> (state.node_hashes[node] >= key_hash) end) || hd(sorted_nodes)

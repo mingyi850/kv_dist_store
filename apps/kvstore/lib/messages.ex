@@ -179,3 +179,18 @@ defmodule KvStore.PutResponse do
       }
     end
 end
+
+defmodule KvStore.FailedResponse do
+    defstruct(
+      request: nil,
+      type: :failed_response
+    )
+
+    @spec new(%KvStore.GetRequest{} | %KvStore.PutRequest{}) :: %KvStore.FailedResponse{}
+    def new(request) do
+      %KvStore.FailedResponse{
+        request: request,
+        type: :failed_response
+      }
+    end
+end
