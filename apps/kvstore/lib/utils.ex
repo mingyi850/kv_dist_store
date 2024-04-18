@@ -1,6 +1,9 @@
 defmodule KvStore.Utils do
   require Logger
 
+  import Kernel, except: [send: 2]
+  import Emulation, only: [send: 2]
+
   @spec hash(any()) :: integer()
   def hash(value) do
     strValue = to_string(value)
@@ -106,9 +109,9 @@ defmodule KvStore.Utils do
   end
 
   # Compare two components of a vector clock c1 and c2.
-  # Return @before if a vector of the form [c1] happens before [c2].
-  # Return @after if a vector of the form [c2] happens before [c1].
-  # Return @concurrent if neither of the above two are true.
+  # Return :before if a vector of the form [c1] happens before [c2].
+  # Return :after if a vector of the form [c2] happens before [c1].
+  # Return :concurrent if neither of the above two are true.
   @spec compare_component(
           non_neg_integer(),
           non_neg_integer()
@@ -116,17 +119,17 @@ defmodule KvStore.Utils do
   defp compare_component(c1, c2) do
     # TODO: Compare c1 and c2.
     cond do
-    c1 == c2 -> @concurrent
-    c1 < c2 -> @before
-    c1 > c2 -> @hafter
+    c1 == c2 -> :concurrent
+    c1 < c2 -> :before
+    c1 > c2 -> :after
     end
   end
 
   @doc """
   Compare two vector clocks v1 and v2.
-  Returns @before if v1 happened before v2.
-  Returns @hafter if v2 happened before v1.
-  Returns @concurrent if neither of the above hold.
+  Returns :before if v1 happened before v2.
+  Returns :after if v2 happened before v1.
+  Returns :concurrent if neither of the above hold.
   """
   @spec compare_vectors(map(), map()) :: :before | :after | :concurrent
   def compare_vectors(v1, v2) do
@@ -139,10 +142,21 @@ defmodule KvStore.Utils do
       )
 
     cond do
-      Enum.all?(compare_result, fn x -> x == @concurrent end) -> @concurrent
-      Enum.all?(compare_result, fn x -> (x == @hafter || x == @concurrent)  end) -> @hafter
-      Enum.all?(compare_result, fn x -> (x == @before || x == @concurrent) end) -> @before
-      true -> @concurrent
+      Enum.all?(compare_result, fn x -> x == :concurrent end) -> :concurrent
+      Enum.all?(compare_result, fn x -> (x == :after || x == :concurrent)  end) -> :after
+      Enum.all?(compare_result, fn x -> (x == :before || x == :concurrent) end) -> :before
+      true -> :concurrent
     end
+  end
+
+  @spec compare_contexts(%KvStore.Context{}, %KvStore.Context{}) :: :before | :after | :concurrent
+  def compare_contexts(context1, context2) do
+    compare_vectors(context1.vector_clock, context2.vector_clock)
+  end
+
+  @spec broadcast([pid()], any()) :: :ok
+  def broadcast(pids, message) do
+    Enum.each(pids, fn pid -> send(pid, message) end)
+    :ok
   end
 end

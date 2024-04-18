@@ -25,14 +25,14 @@ defmodule KvStoreTest do
       spawn(:client, fn ->
         first = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a), :a)
         Logger.info("Got first as #{inspect(first)}")
-        assert first.object == nil
+        assert first.objects == []
         second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new("key1", 123, nil, :client, :a), :a)
         Logger.info("Got second as #{inspect(second)}")
         assert second.context != nil
         third = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a), :a)
         Logger.info("Got third as #{inspect(third)}")
-        assert third.context == second.context
-        assert third.object == 123
+        assert third.objects != []
+        assert hd(third.objects).object == 123
       end)
     handle = Process.monitor(client)
 

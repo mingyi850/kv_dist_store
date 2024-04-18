@@ -35,6 +35,37 @@ defmodule KvStore.GetRequest do
 
 end
 
+defmodule KvStore.InternalGetRequest do
+  defstruct(
+    request: nil,
+    index: 0
+  )
+
+  @spec new(KvStore.GetRequest.t(), integer()) :: %KvStore.InternalGetRequest{}
+  def new(request, index) do
+    %KvStore.InternalGetRequest{
+      request: request,
+      index: index
+    }
+  end
+end
+
+defmodule KvStore.InternalGetResponse do
+  defstruct(
+    response: nil,
+    index: 0
+  )
+
+  @spec new(KvStore.GetResponse.t(), integer()) :: %KvStore.InternalGetResponse{}
+  def new(response, index) do
+    %KvStore.InternalGetResponse{
+      response: response,
+      index: index
+    }
+  end
+
+end
+
 defmodule KvStore.PutRequest do
 
   defstruct(
@@ -46,7 +77,7 @@ defmodule KvStore.PutRequest do
     type: :put
   )
 
-  @spec new(String.t(), any(), pid(), %KvStore.Context{}, pid()) :: %KvStore.PutRequest{}
+  @spec new(String.t(), any(), %KvStore.Context{}, pid(), pid()) :: %KvStore.PutRequest{}
   def new(key, object, context, sender, original_recipient) do
     %KvStore.PutRequest{
       key: key,
@@ -55,6 +86,36 @@ defmodule KvStore.PutRequest do
       sender: sender,
       original_recipient: original_recipient,
       type: :put
+    }
+  end
+end
+
+defmodule KvStore.InternalPutRequest do
+  defstruct(
+    request: nil,
+    index: 0
+  )
+
+  @spec new(KvStore.PutRequest.t(), integer()) :: %KvStore.InternalPutRequest{}
+  def new(request, index) do
+    %KvStore.InternalPutRequest{
+      request: request,
+      index: index
+    }
+  end
+end
+
+defmodule KvStore.InternalPutResponse do
+  defstruct(
+    response: nil,
+    index: 0
+  )
+
+  @spec new(KvStore.PutResponse.t(), integer()) :: %KvStore.InternalPutResponse{}
+  def new(response, index) do
+    %KvStore.InternalPutResponse{
+      response: response,
+      index: index
     }
   end
 end
@@ -77,16 +138,14 @@ end
 
 defmodule KvStore.GetResponse do
     defstruct(
-      object: nil,
-      context: nil,
+      objects: [],
       type: :get_response
     )
 
-    @spec new(%KvStore.CacheEntry{}) :: %KvStore.GetResponse{}
-    def new(entry) do
+    @spec new([%KvStore.CacheEntry{}]) :: %KvStore.GetResponse{}
+    def new(entries) do
       %KvStore.GetResponse{
-        object: entry.object,
-        context: entry.context,
+        objects: entries,
         type: :get_response
       }
     end
