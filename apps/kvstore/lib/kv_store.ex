@@ -94,6 +94,10 @@ alias KvStore.GetResponse
         state = handle_put_response(state, response, sender)
         #Logger.info("Current state: #{inspect(state)}")
         run(state)
+      {_, %KvStore.ReadRepairRequest{} = request} ->
+        state = handle_read_repair(state, request)
+        #Logger.info("Current state: #{inspect(state)}")
+        run(state)
       {_, {:timeout, index, retries}} ->
         state = handle_timeout(state, index, retries)
         run(state)
@@ -152,8 +156,8 @@ alias KvStore.GetResponse
         response_count > state.read_quorum ->
           combined_response = Map.get(state.read_repairs, response.index, nil)
           if combined_response != nil  and is_response_stale(response.response, combined_response) do
-            # TODO: Construct read repair response and send to stale node
-            # send(sender, read_repair_response)
+            read_repair_request = KvStore.ReadRepairRequest.new(request.request.key, combined_response)
+            send(sender, read_repair_request)
           end
           if response_count == state.replication_factor do
             remove_request(state, response.index)
@@ -185,14 +189,8 @@ alias KvStore.GetResponse
   @spec handle_put_req_internal(%KvStore{}, %KvStore.InternalPutRequest{}, atom()) :: %KvStore{}
   def handle_put_req_internal(state, request, sender) do
     client_request = request.request
-    existing = Map.get(state.data, client_request.key, [])
-    state = if existing == [] do
-      %{state | data: Map.put(state.data, client_request.key, [KvStore.CacheEntry.new(client_request.object, request.context)])}
-    else
-      new_data = [KvStore.CacheEntry.new(client_request.object, request.context) | existing]
-      |> get_latest_entries()
-      %{state | data: Map.put(state.data, client_request.key, new_data)}
-    end
+    new_objects = [KvStore.CacheEntry.new(client_request.object, request.context)]
+    state = update_data(state, client_request.key, new_objects)
     send(sender, KvStore.InternalPutResponse.new(KvStore.PutResponse.new(request.context), request.index))
     state
   end
@@ -232,6 +230,22 @@ alias KvStore.GetResponse
     }
   end
 
+  @spec handle_read_repair(%KvStore{}, %KvStore.ReadRepairRequest{}) :: %KvStore{}
+  def handle_read_repair(state, request) do
+    Logger.debug("#{inspect(whoami())} Handling read repair request: #{inspect(request)}")
+    update_data(state, request.key, request.objects)
+  end
+
+  defp update_data(state, key, objects) do
+    existing = Map.get(state.data, key, [])
+    if existing == [] do
+      %{state | data: Map.put(state.data, key, objects)}
+    else
+      new_data = (objects ++ existing)
+      |> get_latest_entries()
+      %{state | data: Map.put(state.data, key, new_data)}
+    end
+  end
   #Combines current clock with node's clock to get latest clock
   defp get_updated_context(state, request) do
     if request.contexts != [] do
@@ -248,16 +262,13 @@ alias KvStore.GetResponse
     combined_response = get_updated_responses(responses)
     stale_nodes = get_stale_nodes(responses, combined_response)
     # TODO: Should send stale_nodes ReadRepairRequest with combined_response
+    read_repair_request = KvStore.ReadRepairRequest.new(request.request.key, combined_response)
+    broadcast(stale_nodes, read_repair_request)
     send(request.request.sender, combined_response)
     %{state |
       request_responses: Map.delete(state.request_responses, index),
       pending_requests: Map.delete(state.pending_requests, index),
       read_repairs: Map.put(state.read_repairs, index, combined_response)}
-  end
-
-  @spec handle_get_response_complete(%KvStore{},  integer()) :: %KvStore{}
-  def handle_get_response_complete(state, index) do
-
   end
 
 

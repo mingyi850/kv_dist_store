@@ -194,3 +194,20 @@ defmodule KvStore.FailedResponse do
       }
     end
 end
+
+defmodule KvStore.ReadRepairRequest do
+  defstruct(
+    key: "",
+    entries: nil,
+    type: :read_repair
+  )
+
+  @spec new(String.t(), [%KvStore.CacheEntry{}]) :: %KvStore.ReadRepairRequest{}
+  def new(key, entries) do
+    %KvStore.ReadRepairRequest{
+      key: key,
+      entries: entries,
+      type: :read_repair
+    }
+  end
+end
