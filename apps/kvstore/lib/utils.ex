@@ -42,7 +42,6 @@ defmodule KvStore.Utils do
       {next_node, next_index} = get_next_node(index, state, MapSet.size(state.live_nodes))
       get_next_nodes(next_index, state, num_nodes - 1, [next_node | accum])
     end
-
   end
 
   @spec consistent_hash(any(), %{sorted_nodes: [atom()], node_hashes: map(), live_nodes: MapSet.t(atom())}) ::
@@ -53,7 +52,7 @@ defmodule KvStore.Utils do
     sorted_nodes = state.sorted_nodes
     # Show all nodes with higher hash value
     original_node = Enum.find(sorted_nodes, fn node -> (state.node_hashes[node] >= key_hash) end) || hd(sorted_nodes)
-    node = Enum.find(sorted_nodes, fn node -> (state.node_hashes[node] >= key_hash) && MapSet.member?(state.live_nodes, node) end) || hd(sorted_nodes)
+    node = Enum.find(sorted_nodes, fn node -> ((state.node_hashes[node] >= key_hash) && MapSet.member?(state.live_nodes, node)) end) || hd(sorted_nodes)
     {original_node, node}
   end
 
@@ -168,4 +167,5 @@ defmodule KvStore.Utils do
     Enum.each(pids, fn pid -> send(pid, message) end)
     :ok
   end
+
 end

@@ -34,7 +34,10 @@ defmodule KvStore do
     timers: %{},
     counter: 1,
     internal_timeout: 100,
-    max_retries: 3
+    max_retries: 3,
+    heartbeat_counter: 1,
+    peer_heartbeats: %{},
+    heartbeat_frequency: 500
   )
   @moduledoc """
   Documentation for `KvStore`.
@@ -60,15 +63,19 @@ alias KvStore.GetResponse
       timers: %{},
       counter: 1,
       internal_timeout: 100,
-      max_retries: 3
+      max_retries: 3,
+      heartbeat_counter: 1,
+      peer_heartbeats: %{},
+      heartbeat_frequency: 500
     }
   end
 
 
   @spec run(%KvStore{}) :: %KvStore{}
   def run(state) do
-    Logger.info("#{inspect(whoami())} Starting KvStore with state #{inspect(state)}")
+    #Logger.info("#{inspect(whoami())} KvStore with state #{inspect(state)}")
     state = %{state | clock: update_vector_clock(whoami(), state.clock)}
+    |> start_heartbeat_timer()
     receive do
       {_, %KvStore.GetRequest{} = request} ->
         state = handle_get_request(state, request)
@@ -98,15 +105,40 @@ alias KvStore.GetResponse
         state = handle_read_repair(state, request)
         #Logger.info("Current state: #{inspect(state)}")
         run(state)
-      {_, {:timeout, index, retries}} ->
+      {:timeout, index, retries} ->
         state = handle_timeout(state, index, retries)
         run(state)
-      {_, {:node_down, node}} ->
-        state = %{state | live_nodes: MapSet.delete(state.live_nodes, node)}
+      {_, :node_down} ->
+        down(state)
+      {sender, {:heartbeat, new_heartbeats, req_resp}} ->
+        state = handle_heartbeat(state, new_heartbeats, sender, req_resp)
         run(state)
-      {_, {:node_up, node}} ->
-        state = %{state | live_nodes: MapSet.put(state.live_nodes, node)}
+      {_, :heartbeat_now} ->
+        Logger.debug("Got heartbeat_now command")
+        state = send_heartbeat(state)
+        timer = Emulation.timer(state.heartbeat_frequency, {whoami(), :heartbeat_now})
+        state = %{state | timers: Map.put(state.timers, :heartbeat, timer)}
         run(state)
+      # Debugging functions
+      {sender, :get_state} ->
+        send(sender, state)
+        run(state)
+      anything ->
+        Logger.error("#{inspect(whoami())} Unknown message received: #{inspect(anything)}")
+        run(state)
+    end
+  end
+
+  def down(state) do
+    Logger.warning("#{inspect(whoami())} Node is down")
+    receive do
+      {_, :node_up} ->
+        run(state)
+      {_, :heartbeat_now} ->
+        # Reset heartbeat timer and remain down
+        timer = Emulation.timer(state.heartbeat_frequency, :heartbeat_now)
+        state = %{state | timers: Map.put(state.timers, :heartbeat, timer)}
+        down(state)
     end
   end
 
@@ -377,4 +409,53 @@ alias KvStore.GetResponse
       timers: Map.delete(state.timers, index)
     }
   end
+
+  @spec send_heartbeat(%KvStore{}) :: %KvStore{}
+  def send_heartbeat(state) do
+    state = %{state | heartbeat_counter: state.heartbeat_counter + 1, peer_heartbeats: Map.put(state.peer_heartbeats, whoami(), state.heartbeat_counter + 1)}
+    msg = {:heartbeat, state.peer_heartbeats, true}
+    peers = Enum.take_random(Enum.filter(state.sorted_nodes, fn node -> node != whoami() end), state.replication_factor)
+    broadcast(peers, msg)
+    state
+  end
+
+  @spec handle_heartbeat(%KvStore{}, map(), atom(), boolean()) :: %KvStore{}
+  def handle_heartbeat(state, new_heartbeat_counter, sender, req_resp) do
+    state = %{state | peer_heartbeats: reconcile_heartbeats(state.peer_heartbeats, new_heartbeat_counter)}
+    state = %{state | heartbeat_counter: Enum.max(Map.values(state.peer_heartbeats)) + 1}
+    state = %{state | peer_heartbeats: Map.put(state.peer_heartbeats, whoami(), state.heartbeat_counter)}
+    Logger.debug("#{inspect(whoami())} Handling heartbeat from #{inspect(sender)} with new counter: #{inspect(state.heartbeat_counter)} - new heartbeats: #{inspect(state.peer_heartbeats)}")
+    if req_resp do
+      msg = {:heartbeat, state.peer_heartbeats, false}
+      send(sender, msg)
+    end
+    check_live_node_changes(state)
+  end
+
+  @spec reconcile_heartbeats(map(), map()) :: %{}
+  def reconcile_heartbeats(peer_heartbeats, new_peer_heartbeats) do
+    combine_vector_clocks(peer_heartbeats, new_peer_heartbeats) # Take the max value of each k-v pair
+  end
+
+  @spec check_live_node_changes(%KvStore{}) :: %KvStore{}
+  def check_live_node_changes(state) do
+    heartbeats = state.peer_heartbeats
+    max_heartbeat = Enum.max(Map.values(heartbeats))
+    down_nodes = Enum.filter(Map.keys(heartbeats), fn node -> max_heartbeat - Map.get(heartbeats, node) > 60 end)
+    live_nodes = MapSet.new(Enum.filter(state.sorted_nodes, fn node -> !Enum.member?(down_nodes, node) end))
+    Logger.warning("#{inspect(whoami())}: Nodes down: #{inspect(down_nodes)}")
+    %{state |
+      live_nodes: live_nodes
+    }
+  end
+
+  @spec start_heartbeat_timer(%KvStore{}) :: %KvStore{}
+  def start_heartbeat_timer(state) do
+    if Map.get(state.timers, :heartbeat, nil) == nil do
+      send(whoami(), :heartbeat_now)
+    end
+    state
+  end
+
+
 end

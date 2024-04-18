@@ -80,4 +80,59 @@ defmodule KvStoreTest do
   after
     Emulation.terminate()
   end
+
+  test "Gossip protocol allows eventual failure detection and rejoining" do
+    Emulation.init()
+    Emulation.append_fuzzers([Fuzzers.delay(2)])
+
+    nodes = [:a, :b, :c, :d, :e]
+    base_config =
+      KvStore.init(nodes, 3, 2, 2)
+
+    nodes |> Enum.each(fn node -> spawn(node, fn -> KvStore.run(base_config) end) end)
+
+    client =
+      spawn(:client, fn ->
+        first = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a), :b)
+        Logger.info("Got first as #{inspect(first)}")
+        assert first.objects == []
+        second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new("key1", 123, [], :client, :a), :a)
+        Logger.info("Got second as #{inspect(second)}")
+        assert second.context != nil
+        third = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a), :c)
+        Logger.info("Got third as #{inspect(third)}")
+        assert third.objects != []
+        assert hd(third.objects).object == 123
+
+        #Kill a node
+        send(:a, :node_down)
+        receive do
+        after
+          5000 -> :ok
+        end
+        #Check that all nodes agree that node is down
+        live_nodes = nodes |> Enum.reject(fn node -> node == :a end)
+        states = live_nodes |> Enum.map(fn node -> KvStore.TestClient.testClientSend(:get_state, node).live_nodes end)
+        assert Enum.all?(states, fn x -> !MapSet.member?(x, :a) end)
+
+        send(:a, :node_up)
+        receive do
+        after
+          5000 -> :ok
+        end
+        #Check that all nodes agree that node is up
+        states = nodes |> Enum.map(fn node -> KvStore.TestClient.testClientSend(:get_state, node).live_nodes end)
+        assert Enum.all?(states, fn x -> MapSet.member?(x, :a) end)
+      end)
+    handle = Process.monitor(client)
+
+    #Timeout.
+    receive do
+      {:DOWN, ^handle, _, _, _} -> true
+    after
+      15_000 -> assert false
+    end
+  after
+    Emulation.terminate()
+  end
 end
