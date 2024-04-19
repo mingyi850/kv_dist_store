@@ -211,3 +211,86 @@ defmodule KvStore.ReadRepairRequest do
     }
   end
 end
+
+"""
+message that kvnodes use to inform observer about get request (timestamp can be retrieved by `:os.system_time(:millisecond)`)
+"""
+defmodule KvStore.GetRequestLog do
+
+  defstruct(
+    req_id: 0,
+    key: "",
+    object: nil,
+    sender: nil,
+    recv_ts: 0,
+    resp_ts: 0,
+    type: :get_log
+  )
+
+  @spec new(non_neg_integer(), String.t(), any(), pid(), non_neg_integer(), non_neg_integer()) :: %KvStore.GetRequestLog{}
+  def new(req_id, key, object, sender, recv_ts, resp_ts) do
+    %KvStore.GetRequestLog{
+      req_id: req_id,
+      key: key,
+      object: object,
+      sender: sender,
+      recv_ts: recv_ts,
+      resp_ts: resp_ts,
+      type: :get_log
+    }
+  end
+
+end
+
+"""
+message that kvnodes use to inform observer about put request (timestamp can be retrieved by `:os.system_time(:millisecond)`)
+"""
+defmodule KvStore.PutRequestLog do
+
+  defstruct(
+    req_id: 0,
+    key: "",
+    object: nil,
+    sender: nil,
+    recv_ts: 0,
+    resp_ts: 0,
+    type: :put_log
+  )
+
+  @spec new(non_neg_integer(), String.t(), any(), pid(), non_neg_integer(), non_neg_integer()) :: %KvStore.PutRequestLog{}
+  def new(req_id, key, object, sender) do
+    %KvStore.PutRequestLog{
+      req_id: req_id,
+      key: key,
+      object: object,
+      sender: sender,
+      recv_ts: recv_ts,
+      resp_ts: resp_ts,
+      type: :put_log
+    }
+  end
+end
+
+"""
+message that client nodes use to inform observer about latency of requests (timestamp can be retrieved by `:os.system_time(:millisecond)`)
+"""
+defmodule KvStore.ClientRequestLog do
+
+  defstruct(
+    req_id: 0,
+    send_ts: 0,
+    recv_ts: 0,
+    type: :client_log
+  )
+
+  @spec new(non_neg_integer(), non_neg_integer(), non_neg_integer()) :: %KvStore.GetRequestLog{}
+  def new(req_id, send_ts, recv_ts) do
+    %KvStore.GetRequestLog{
+      req_id: req_id,
+      send_ts: send_ts,
+      recv_ts: recv_ts,
+      type: :client_log
+    }
+  end
+
+end
