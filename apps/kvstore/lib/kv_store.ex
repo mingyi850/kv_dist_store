@@ -21,6 +21,7 @@ defmodule KvStore do
   defstruct(
     sorted_nodes: [],
     live_nodes: {},
+    merkle_trees: %{},
     replication_factor: 1,
     read_quorum: 1,
     write_quorum: 1,
@@ -33,7 +34,7 @@ defmodule KvStore do
     alternate_data: %{},
     timers: %{},
     counter: 1,
-    internal_timeout: 100,
+    internal_timeout: 300,
     max_retries: 3,
     heartbeat_counter: 1,
     peer_heartbeats: %{},
@@ -47,9 +48,11 @@ alias KvStore.GetResponse
   @spec init([atom()], integer(), integer(), integer()) :: %KvStore{}
   def init(nodes, replication_factor, read_quorum, write_quorum) do
     node_hashes = Enum.map(nodes, fn node -> {node, hash(node)} end) |> Enum.into(%{})
+    sorted_nodes = sort_nodes(nodes)
     %KvStore{
       sorted_nodes: sort_nodes(nodes),
       live_nodes: MapSet.new(nodes),
+      merkle_trees: Map.new(nodes, fn node -> {node, build_merkle_tree(node, sorted_nodes)} end),
       replication_factor: replication_factor,
       read_quorum: read_quorum,
       write_quorum: write_quorum,
@@ -443,6 +446,7 @@ alias KvStore.GetResponse
     max_heartbeat = Enum.max(Map.values(heartbeats))
     down_nodes = Enum.filter(Map.keys(heartbeats), fn node -> max_heartbeat - Map.get(heartbeats, node) > 60 end)
     live_nodes = MapSet.new(Enum.filter(state.sorted_nodes, fn node -> !Enum.member?(down_nodes, node) end))
+    #TODO: Reconcile merkle trees when new live nodes are detected
     Logger.warning("#{inspect(whoami())}: Nodes down: #{inspect(down_nodes)}")
     %{state |
       live_nodes: live_nodes
@@ -457,5 +461,12 @@ alias KvStore.GetResponse
     state
   end
 
+  @spec build_merkle_tree(atom(), [atom()]) :: %KvStore.FixedMerkleTree{}
+  def build_merkle_tree(node, sorted_nodes) do
+    Logger.debug("Building merkle tree for node: #{inspect(node)}")
+    range_start = hash(KvStore.Utils.get_previous_node(node, %{sorted_nodes: sorted_nodes}))
+    range_end = hash(node)
+    KvStore.FixedMerkleTree.build_tree(range_start, range_end, 4, 4)
+  end
 
 end
