@@ -33,3 +33,22 @@ defmodule KvStore.TestClient do
     end
   end
 end
+
+defmodule KvStoreTest.Utils do
+  import KvStore.Utils
+  require Logger
+
+  @spec generate_key(atom(), %{sorted_nodes: [atom()], node_hashes: map(), live_nodes: MapSet.t(atom())}) :: String.t()
+  def generate_key(target, state) do
+    Logger.info("Sorted nodes are #{inspect(state.sorted_nodes)}, node hashes are #{inspect(state.node_hashes)}")
+    candidate_keys = 1..10000
+    |> Enum.map(fn n -> "key#{n}" end)
+    |> Enum.filter(fn s ->
+      {_, original_node} = consistent_hash(s, state)
+      #Logger.info("Original node for #{s} is #{original_node}")
+      original_node == target
+    end)
+    Logger.debug("Got candidate keys #{inspect(candidate_keys)}")
+    Enum.random(candidate_keys)
+  end
+end

@@ -38,12 +38,16 @@ defmodule KvStore.LoadBalancer do
     Logger.info("Starting LoadBalancer with state #{inspect(state)}")
     receive do
       {sender, {:get, key}} ->
-        {original_node, node} = consistent_hash(key, state)
+        {original_node, _} = consistent_hash(key, state)
+        preference_list = get_preference_list(key, state, state.replication_factor)
+        node = Enum.random(preference_list)
         #TODO: Redirect messages to any node in the preference list instead of the first node.
         send(node, KvStore.GetRequest.new(key, sender, original_node))
         run(state)
       {sender, {:put, key, object, context}} ->
-        {original_node, node} = consistent_hash(key, state)
+        {original_node, _} = consistent_hash(key, state)
+        preference_list = get_preference_list(key, state, state.replication_factor)
+        node = Enum.random(preference_list)
         #TODO: Redirect messages to any node in the preference list instead of the first node.
         send(node, KvStore.PutRequest.new(key, object, context, sender, original_node))
         run(state)

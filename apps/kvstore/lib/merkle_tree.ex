@@ -45,6 +45,7 @@ defmodule KvStore.FixedMerkleTree do
   #   - The secondary node will then respond with a :sync_complete message with the updated values of each key and value. The primary node can use these values to reconcile new values as well.
 
   import KvStore.Utils
+  import Emulation
 
   require Logger
   defstruct(
@@ -151,6 +152,21 @@ defmodule KvStore.FixedMerkleTree do
       leafNode.bucket[key]
     else
       nil
+    end
+  end
+
+  @spec find_matching_node(%KvStore.FixedMerkleTree{}, %KvStore.MerkleTreeHeader{}) :: %KvStore.FixedMerkleTree{}
+  def find_matching_node(tree, header) do
+    if header.range_start == tree.range_start and header.range_end == tree.range_end and header.hash == tree.hash do
+      tree
+    else
+      if tree.isleaf || tree.range_start > header.range_end || tree.range_end < header.range_start do
+        Logger.warning("#{inspect(whoami())}: No matching node found for range: #{header.range_start} - #{header.range_end}")
+        nil
+      else
+        matching_nodes = tree.child_values |> Enum.map(fn child -> find_matching_node(child, header) end)
+        Enum.find(matching_nodes, fn node -> node != nil end)
+      end
     end
   end
 

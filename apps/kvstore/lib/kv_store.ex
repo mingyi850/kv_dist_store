@@ -43,6 +43,7 @@ defmodule KvStore do
   @moduledoc """
   Documentation for `KvStore`.
   """
+alias KvStore.FixedMerkleTree
 alias KvStore.GetResponse
 
   @spec init([atom()], integer(), integer(), integer()) :: %KvStore{}
@@ -108,6 +109,15 @@ alias KvStore.GetResponse
         state = handle_read_repair(state, request)
         #Logger.info("Current state: #{inspect(state)}")
         run(state)
+      {sender, %KvStore.SyncMerkleTree{} = sync_request} ->
+        state = handle_merkle_tree_sync(state, sync_request.headers, sync_request.to_sync, sender)
+        run(state)
+      {sender, %KvStore.UnsyncedMerkleTree{} = unsync_response} ->
+        state = handle_unsynced_merkle_tree(state, unsync_response.header, unsync_response.to_sync, sender)
+        run(state)
+      {_, %KvStore.MerkleSyncComplete{} = sync_complete} ->
+        state = handle_merkle_sync_complete(state, sync_complete.to_sync)
+        run(state)
       {:timeout, index, retries} ->
         state = handle_timeout(state, index, retries)
         run(state)
@@ -125,6 +135,10 @@ alias KvStore.GetResponse
       # Debugging functions
       {sender, :get_state} ->
         send(sender, state)
+        run(state)
+      {sender, {:get_value_at, key}} ->
+        Logger.info("Got request for value at key: #{inspect(key)}")
+        send(sender, Map.get(state.data, key, nil))
         run(state)
       anything ->
         Logger.error("#{inspect(whoami())} Unknown message received: #{inspect(anything)}")
@@ -261,14 +275,16 @@ alias KvStore.GetResponse
 
   defp update_data(state, key, objects) do
     existing = Map.get(state.data, key, [])
+    {original_node, _} = consistent_hash(key, state)
     if existing == [] do
-      %{state | data: Map.put(state.data, key, objects)}
+      %{state | data: Map.put(state.data, key, objects), merkle_trees: Map.put(state.merkle_trees, original_node, FixedMerkleTree.insert(Map.get(state.merkle_trees, original_node, nil), key, objects))}
     else
       new_data = (objects ++ existing)
       |> get_latest_entries()
-      %{state | data: Map.put(state.data, key, new_data)}
+      %{state | data: Map.put(state.data, key, new_data), merkle_trees: Map.put(state.merkle_trees, original_node, FixedMerkleTree.insert(Map.get(state.merkle_trees, original_node, nil), key, new_data))}
     end
   end
+
   #Combines current clock with node's clock to get latest clock
   defp get_updated_context(state, request) do
     if request.contexts != [] do
@@ -285,7 +301,6 @@ alias KvStore.GetResponse
         responses = Map.get(state.request_responses, index, %{})
         combined_response = get_updated_responses(responses)
         stale_nodes = get_stale_nodes(responses, combined_response)
-        # TODO: Should send stale_nodes ReadRepairRequest with combined_response
         read_repair_request = KvStore.ReadRepairRequest.new(request.request.key, combined_response)
         broadcast(stale_nodes, read_repair_request)
         send(request.request.sender, combined_response)
@@ -445,12 +460,14 @@ alias KvStore.GetResponse
     heartbeats = state.peer_heartbeats
     max_heartbeat = Enum.max(Map.values(heartbeats))
     down_nodes = Enum.filter(Map.keys(heartbeats), fn node -> max_heartbeat - Map.get(heartbeats, node) > 60 end)
+    Logger.debug("Down nodes: #{inspect(down_nodes)}")
     live_nodes = MapSet.new(Enum.filter(state.sorted_nodes, fn node -> !Enum.member?(down_nodes, node) end))
-    #TODO: Reconcile merkle trees when new live nodes are detected
-    Logger.warning("#{inspect(whoami())}: Nodes down: #{inspect(down_nodes)}")
-    %{state |
+    new_live_nodes = MapSet.difference(live_nodes, state.live_nodes)
+    Logger.debug("New live nodes: #{inspect(new_live_nodes)}")
+    state = %{state |
       live_nodes: live_nodes
     }
+    Enum.reduce(new_live_nodes, state, fn node, _ -> initiate_merkle_tree_sync(state, node) end)
   end
 
   @spec start_heartbeat_timer(%KvStore{}) :: %KvStore{}
@@ -467,6 +484,78 @@ alias KvStore.GetResponse
     range_start = hash(KvStore.Utils.get_previous_node(node, %{sorted_nodes: sorted_nodes}))
     range_end = hash(node)
     KvStore.FixedMerkleTree.build_tree(range_start, range_end, 4, 4)
+  end
+
+  @spec initiate_merkle_tree_sync(%KvStore{}, atom()) :: %KvStore{}
+  def initiate_merkle_tree_sync(state, node) do
+    Logger.debug("Initiating merkle tree sync for node: #{inspect(node)}")
+    nodes_to_sync = get_responsible_range(node, state) |> MapSet.delete(node)
+    syncing_nodes = Enum.map(nodes_to_sync, fn n -> {n, get_first_responsible_node(n, state)} end) ++ [{node, get_second_responsible_node(node, state)}]
+    sync_map = Enum.reduce(syncing_nodes,
+      %{},
+      fn {to_sync, responsible_node}, acc ->
+        Map.update(acc, responsible_node, [to_sync], fn existing ->
+          [to_sync | existing]
+        end)
+      end
+    )
+    Logger.debug("Sync map: #{inspect(sync_map)}")
+    # First live node which replicats to the node should initiate sync for it's own set of keys
+    # if :a is responsible for [:d, :c, :a]: and all nodes are live, :d should sync it's replicas for :d to :a
+    # if :a is responsible for [:d, :c, :a]: and :d is not live, :c should sync its replicas for [:d and :c] to :a
+    # First available replica should sync original node's keys back to it.
+    # Now, we know that :a needs it's sync back online:
+    # If keys in :a are replicated to [:b, :e] -> and :b is down, :e should sync it's replicas for :a to :a
+    my_responsibilities = Map.get(sync_map, whoami(), nil)
+    if my_responsibilities != nil do
+      Enum.each(my_responsibilities, fn to_sync ->
+        merkle_tree = Map.get(state.merkle_trees, to_sync, nil)
+        if merkle_tree != nil do
+          Logger.debug("Starting sync for node: #{inspect(to_sync)} to node: #{inspect(node)}")
+          send(node, KvStore.SyncMerkleTree.new(to_sync, [FixedMerkleTree.getHeader(merkle_tree)]))
+        end
+      end)
+    end
+    state
+  end
+
+  @spec handle_merkle_tree_sync(%KvStore{}, [%KvStore.MerkleTreeHeader{}], atom(), atom()) :: %KvStore{}
+  def handle_merkle_tree_sync(state, headers, to_sync, sender) do
+    Logger.debug("#{inspect(whoami())} Handling merkle tree sync for node: #{inspect(to_sync)}")
+    merkle_tree = Map.get(state.merkle_trees, to_sync, nil)
+    if merkle_tree != nil do
+      #Logger.debug("Merkle tree for node: #{inspect(whoami())} is: #{inspect(merkle_tree)}")
+      matching_trees = Enum.map(headers, fn header -> {FixedMerkleTree.find_matching_node(merkle_tree, header), header} end)
+      unmatched_trees = Enum.filter(matching_trees, fn {tree, header} -> tree.hash != header.hash end)
+      if unmatched_trees == [] do
+        send(sender, KvStore.MerkleSyncComplete.new(to_sync))
+      else
+        Enum.each(unmatched_trees, fn {_, header} -> send(sender, KvStore.UnsyncedMerkleTree.new(to_sync, header)) end)
+      end
+    end
+    state
+  end
+
+  @spec handle_unsynced_merkle_tree(%KvStore{}, %KvStore.MerkleTreeHeader{}, atom(), atom()) :: %KvStore{}
+  def handle_unsynced_merkle_tree(state, header, to_sync, sender) do
+    Logger.debug("#{inspect(whoami())}: Handling unsynced merkle tree for node: #{inspect(to_sync)} from node: #{inspect(sender)}")
+    merkle_tree = Map.get(state.merkle_trees, to_sync, nil)
+    matching_tree = FixedMerkleTree.find_matching_node(merkle_tree, header)
+    if !matching_tree.is_leaf do
+      children_headers = matching_tree.child_values |> Enum.map(fn child -> FixedMerkleTree.getHeader(child) end)
+      send(sender, KvStore.SyncMerkleTree.new(to_sync, children_headers))
+    else
+      kv_stores = matching_tree.bucket
+      Enum.map(kv_stores, fn {key, entries} -> KvStore.ReadRepairRequest.new(key, entries) end)
+      |> Enum.each(fn request -> send(sender, request) end)
+    end
+    state
+  end
+
+  @spec handle_merkle_sync_complete(%KvStore{}, atom()) :: %KvStore{}
+  def handle_merkle_sync_complete(state, node) do
+    Logger.debug("Handling merkle sync complete for node: #{inspect(node)}")
+    state
   end
 
 end

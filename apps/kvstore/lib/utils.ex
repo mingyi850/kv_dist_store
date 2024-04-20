@@ -60,6 +60,25 @@ defmodule KvStore.Utils do
     Enum.find(state.sorted_nodes, fn node -> MapSet.member?(state.live_nodes, node) end)
   end
 
+  @spec get_first_responsible_node(atom(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom()), replication_factor: integer()}) :: atom()
+  def get_first_responsible_node(node, state) do
+    preference_list = get_preference_list(node, state, state.replication_factor)
+    if preference_list != [] do
+      hd(preference_list)
+    else
+      nil
+    end
+  end
+
+  def get_second_responsible_node(node, state) do
+    preference_list = Enum.drop(get_preference_list(node, state, 2), 1)
+    if preference_list != [] do
+      hd(preference_list)
+    else
+      nil
+    end
+  end
+
   @spec get_preference_list(atom(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}, integer()) :: [atom()]
   def get_preference_list(key, state, num_nodes) do
     {_, node} = consistent_hash(key, state)
