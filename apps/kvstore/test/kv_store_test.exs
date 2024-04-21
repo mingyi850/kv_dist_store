@@ -9,6 +9,8 @@ defmodule KvStoreTest do
   require KvStore.TestClient
   import KvStore.TestClient
   import KvStore
+  import KvStore.Utils
+  import KvStoreTest.Utils
 
   require Logger
 
@@ -123,6 +125,66 @@ defmodule KvStoreTest do
         #Check that all nodes agree that node is up
         states = nodes |> Enum.map(fn node -> KvStore.TestClient.testClientSend(:get_state, node).live_nodes end)
         assert Enum.all?(states, fn x -> MapSet.member?(x, :a) end)
+      end)
+    handle = Process.monitor(client)
+
+    #Timeout.
+    receive do
+      {:DOWN, ^handle, _, _, _} -> true
+    after
+      15_000 -> assert false
+    end
+  after
+    Emulation.terminate()
+  end
+
+  test "Merkle tree sync repairs missed data after outage" do
+    Emulation.init()
+    Emulation.append_fuzzers([Fuzzers.delay(2)])
+
+    nodes = [:a, :b, :c, :d, :e]
+    base_config =
+      KvStore.init(nodes, 3, 2, 2)
+
+    sorted_nodes = KvStore.Utils.sort_nodes(nodes)
+    node_hashes = Enum.map(nodes, fn node -> {node, hash(node)} end) |> Enum.into(%{})
+    live_nodes = MapSet.new(sorted_nodes)
+    state = %{sorted_nodes: sorted_nodes, node_hashes: node_hashes, live_nodes: live_nodes}
+    owned_key = KvStoreTest.Utils.generate_key(:a, state)
+    replicated_key = KvStoreTest.Utils.generate_key(KvStore.Utils.get_previous_node(:a, %{sorted_nodes: sorted_nodes}), state)
+    nodes |> Enum.each(fn node -> spawn(node, fn -> KvStore.run(base_config) end) end)
+
+    sorted_nodes = nodes |> Enum.sort()
+    client =
+      spawn(:client, fn ->
+        receive do
+        after
+          1000 -> :ok
+        end
+        #Kill :a
+        send(:a, :node_down)
+        #Populate Nodes
+        first = KvStore.TestClient.testClientSend(KvStore.PutRequest.new(owned_key, 123, [], :client, :a), :b)
+        Logger.info("Got first as #{inspect(first)}")
+        second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new(replicated_key, 23123, [], :client, :a), :c)
+        assert first.context != nil
+        assert second.context != nil
+        third = KvStore.TestClient.testClientSend(KvStore.GetRequest.new(owned_key, :client, :a), :b)
+        Logger.info("Got third as #{inspect(third)}")
+        assert hd(third.objects).object == 123
+
+        #Kill a node
+        send(:a, :node_up)
+        receive do
+        after
+          5000 -> :ok
+        end
+        #Check that all nodes agree that node is down
+        owned_key_resp = KvStore.TestClient.testClientSend({:get_value_at, owned_key}, :a)
+        replicated_key_resp = KvStore.TestClient.testClientSend({:get_value_at, replicated_key}, :a)
+        #Check that all nodes agree that node is up
+        assert hd(owned_key_resp).object == 123
+        assert hd(replicated_key_resp).object == 23123
       end)
     handle = Process.monitor(client)
 

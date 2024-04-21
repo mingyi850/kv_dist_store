@@ -6,7 +6,7 @@ defmodule KvDistStore.MixProject do
       app: :kv_dist_store,
       apps_path: "apps",
       version: "0.1.0",
-      elixir: "~> 1.16",
+      elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       dializer: [

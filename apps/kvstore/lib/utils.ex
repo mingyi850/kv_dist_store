@@ -9,7 +9,6 @@ defmodule KvStore.Utils do
     strValue = to_string(value)
     :crypto.hash(:sha256, strValue)
     |> :binary.decode_unsigned()
-    |> rem(360)
   end
 
   @spec sort_nodes([atom()]) :: [atom()]
@@ -17,8 +16,8 @@ defmodule KvStore.Utils do
     Enum.sort_by(nodes, fn node -> hash(node) end)
   end
 
-  @spec get_next_node(integer(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}, integer()) :: {atom(), integer()}
-  def get_next_node(index, state, count) do
+  @spec get_next_live_node(integer(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}, integer()) :: {atom(), integer()}
+  def get_next_live_node(index, state, count) do
     if count == 0 do
       {nil, index}
     else
@@ -29,18 +28,18 @@ defmodule KvStore.Utils do
       if MapSet.member?(state.live_nodes, next_node) do
         {next_node, next_index}
       else
-        get_next_node(next_index, state, count - 1)
+        get_next_live_node(next_index, state, count - 1)
       end
     end
   end
 
-  @spec get_next_nodes(integer(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}, integer(), [atom()]) :: [atom()]
-  def get_next_nodes(index, state, num_nodes, accum) do
+  @spec get_next_live_nodes(integer(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}, integer(), [atom()]) :: [atom()]
+  def get_next_live_nodes(index, state, num_nodes, accum) do
     if num_nodes == 0 do
       Enum.reverse(accum)
     else
-      {next_node, next_index} = get_next_node(index, state, MapSet.size(state.live_nodes))
-      get_next_nodes(next_index, state, num_nodes - 1, [next_node | accum])
+      {next_node, next_index} = get_next_live_node(index, state, MapSet.size(state.live_nodes))
+      get_next_live_nodes(next_index, state, num_nodes - 1, [next_node | accum])
     end
   end
 
@@ -48,20 +47,60 @@ defmodule KvStore.Utils do
             {any(), any()}
   def consistent_hash(key, state) do
     key_hash = hash(key)
-    #Logger.debug("Hash for key #{key} is #{key_hash}")
     sorted_nodes = state.sorted_nodes
     # Show all nodes with higher hash value
     original_node = Enum.find(sorted_nodes, fn node -> (state.node_hashes[node] >= key_hash) end) || hd(sorted_nodes)
-    node = Enum.find(sorted_nodes, fn node -> ((state.node_hashes[node] >= key_hash) && MapSet.member?(state.live_nodes, node)) end) || hd(sorted_nodes)
+    node = Enum.find(sorted_nodes, fn node -> ((state.node_hashes[node] >= key_hash) && MapSet.member?(state.live_nodes, node)) end) || get_first_live_node(state)
+    #Logger.debug("Original node is #{original_node}, Node is #{node}")
     {original_node, node}
   end
 
+  @spec get_first_live_node(%{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}) :: atom()
+  def get_first_live_node(state) do
+    Enum.find(state.sorted_nodes, fn node -> MapSet.member?(state.live_nodes, node) end)
+  end
 
+  @spec get_first_responsible_node(atom(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom()), replication_factor: integer()}) :: atom()
+  def get_first_responsible_node(node, state) do
+    preference_list = get_preference_list(node, state, state.replication_factor)
+    if preference_list != [] do
+      hd(preference_list)
+    else
+      nil
+    end
+  end
+
+  def get_second_responsible_node(node, state) do
+    preference_list = Enum.drop(get_preference_list(node, state, 2), 1)
+    if preference_list != [] do
+      hd(preference_list)
+    else
+      nil
+    end
+  end
 
   @spec get_preference_list(atom(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}, integer()) :: [atom()]
   def get_preference_list(key, state, num_nodes) do
     {_, node} = consistent_hash(key, state)
-    get_next_nodes(Enum.find_index(state.sorted_nodes, fn n -> n == node end), state, num_nodes - 1, [node])
+    get_next_live_nodes(Enum.find_index(state.sorted_nodes, fn n -> n == node end), state, num_nodes - 1, [node])
+  end
+
+  #Returns the nodes a node holds replicas for
+  @spec get_responsible_range(atom(), %{sorted_nodes: [atom()], replication_factor: integer()}) :: MapSet.t(atom())
+  def get_responsible_range(node, state) do
+    node_index = Enum.find_index(state.sorted_nodes, fn n -> n == node end)
+    node_list = Enum.map((state.replication_factor - 1 .. 0), fn i ->
+      index = rem(node_index - i, length(state.sorted_nodes))
+      Enum.at(state.sorted_nodes, index)
+    end)
+    MapSet.new(node_list)
+  end
+
+  @spec get_previous_node(atom(), %{sorted_nodes: [atom()]}) :: atom()
+  def get_previous_node(node, state) do
+    node_index = Enum.find_index(state.sorted_nodes, fn n -> n == node end)
+    previous_index = rem(node_index - 1, length(state.sorted_nodes))
+    Enum.at(state.sorted_nodes, previous_index)
   end
 
 

@@ -212,6 +212,58 @@ defmodule KvStore.ReadRepairRequest do
   end
 end
 
+defmodule KvStore.SyncMerkleTree do
+
+    defstruct(
+      to_sync: nil,
+      headers: [],
+      type: :sync_merkle_tree
+    )
+
+    @spec new(atom(), [%KvStore.MerkleTreeHeader{}]) :: %KvStore.SyncMerkleTree{}
+    def new(to_sync, headers) do
+      %KvStore.SyncMerkleTree{
+        to_sync: to_sync,
+        headers: headers,
+        type: :sync_merkle_tree
+      }
+    end
+end
+
+defmodule KvStore.UnsyncedMerkleTree do
+
+      defstruct(
+        to_sync: nil,
+        header: nil,
+        type: :unsynced_merkle_tree
+      )
+
+      @spec new(atom(), %KvStore.MerkleTreeHeader{}) :: %KvStore.UnsyncedMerkleTree{}
+      def new(to_sync, header) do
+        %KvStore.UnsyncedMerkleTree{
+          to_sync: to_sync,
+          header: header,
+          type: :unsynced_merkle_tree
+        }
+      end
+end
+
+defmodule KvStore.MerkleSyncComplete do
+
+      defstruct(
+        to_sync: nil,
+        type: :merkle_sync_complete
+      )
+
+      @spec new(atom()) :: %KvStore.MerkleSyncComplete{}
+      def new(to_sync) do
+        %KvStore.MerkleSyncComplete{
+          to_sync: to_sync,
+          type: :merkle_sync_complete
+        }
+      end
+end
+
 """
 message that kvnodes use to inform observer about get request (timestamp can be retrieved by `:os.system_time(:millisecond)`)
 """

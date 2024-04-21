@@ -38,11 +38,17 @@ defmodule KvStore.LoadBalancer do
     Logger.info("Starting LoadBalancer with state #{inspect(state)}")
     receive do
       {sender, {:get, key}} ->
-        {original_node, node} = consistent_hash(key, state)
+        {original_node, _} = consistent_hash(key, state)
+        preference_list = get_preference_list(key, state, state.replication_factor)
+        node = Enum.random(preference_list)
+        #TODO: Redirect messages to any node in the preference list instead of the first node.
         send(node, KvStore.GetRequest.new(key, sender, original_node))
         run(state)
       {sender, {:put, key, object, context}} ->
-        {original_node, node} = consistent_hash(key, state)
+        {original_node, _} = consistent_hash(key, state)
+        preference_list = get_preference_list(key, state, state.replication_factor)
+        node = Enum.random(preference_list)
+        #TODO: Redirect messages to any node in the preference list instead of the first node.
         send(node, KvStore.PutRequest.new(key, object, context, sender, original_node))
         run(state)
       {_, {:node_down, node}} ->
@@ -57,23 +63,6 @@ defmodule KvStore.LoadBalancer do
       unknown ->
         Logger.error("LB Unknown message received: #{inspect(unknown)}")
         run(state)
-    end
-  end
-
-  @spec handle_call(any(), atom(), %KvStore.LoadBalancer{}) :: %KvStore.LoadBalancer{}
-  def handle_call(message, sender, state) do
-    case message do
-      {:get, key} ->
-        {original_node, node} = consistent_hash(key, state.sorted_nodes)
-        node.send(KvStore.GetRequest.new(key, original_node, sender))
-        state
-
-      {:put, key, object, context} ->
-
-
-        {original_node, node} = consistent_hash(key, state.sorted_nodes)
-        node.send(KvStore.PutRequest.new(context, key, object, original_node, sender))
-        state
     end
   end
 end
