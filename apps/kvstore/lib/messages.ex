@@ -156,14 +156,16 @@ end
 defmodule KvStore.GetResponse do
     defstruct(
       objects: [],
-      type: :get_response
+      type: :get_response,
+      req_id: 0
     )
 
-    @spec new([%KvStore.CacheEntry{}]) :: %KvStore.GetResponse{}
-    def new(entries) do
+    @spec new([%KvStore.CacheEntry{}], non_neg_integer()) :: %KvStore.GetResponse{}
+    def new(entries, req_id) do
       %KvStore.GetResponse{
         objects: entries,
-        type: :get_response
+        type: :get_response,
+        req_id: req_id
       }
     end
 
@@ -176,14 +178,16 @@ end
 defmodule KvStore.PutResponse do
     defstruct(
       context: nil,
-      type: :put_response
+      type: :put_response,
+      req_id: 0
     )
 
-    @spec new(%KvStore.Context{}) :: %KvStore.PutResponse{}
-    def new(context) do
+    @spec new(%KvStore.Context{}, non_neg_integer()) :: %KvStore.PutResponse{}
+    def new(context, req_id) do
       %KvStore.PutResponse{
         context: context,
-        type: :put_response
+        type: :put_response,
+        req_id: req_id
       }
     end
 end

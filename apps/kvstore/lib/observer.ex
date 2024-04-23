@@ -63,11 +63,19 @@ defmodule KvStore.Observer do
     Logger.info("Starting Observer with state #{inspect(state)}")
     receive do
       {_, %KvStore.GetRequestLog{} = request} -> 
+        Logger.info("Observer receive (get) #{inspect(request)}")
         state = log_get(state, request)
+        Logger.info("Observer data: #{inspect(state.data)}, log: #{inspect(state.log)}")
         run(state)
-      {_, %KvStore.PutRequestLog{} = request} -> 
+      {_, %KvStore.PutRequestLog{} = request} ->
+        Logger.info("Observer receive (put) #{inspect(request)}")
+        state = log_put(state, request)
+        Logger.info("Observer data: #{inspect(state.data)}, log: #{inspect(state.log)}")
         run(state)
       {_, %KvStore.ClientRequestLog{} = request} -> 
+        Logger.info("Observer receive (client) #{inspect(request)}")
+        state = log_client(state, request)
+        Logger.info("Observer data: #{inspect(state.data)}, log: #{inspect(state.log)}")
         run(state)
       unknown ->
         Logger.error("Observer Unknown message received: #{inspect(unknown)}")
@@ -79,7 +87,8 @@ defmodule KvStore.Observer do
   def log_get(state, request) do 
     if Map.has_key?(state.log, request.req_id) do 
       log_entry = %KvStore.LogEntry{state.log[request.req_id] | 
-        is_stale: check_staleness(Map.get(state.data, request.key, [%{id: 0, value: nil}]), request.req_id, request.object),
+        type: :get,
+        is_stale: check_staleness(Map.get(state.data, request.key, [%{id: 0, value: nil} | []]), request.req_id, request.object),
         kvnode: request.sender,
         # kvnode_latency: request.resp_ts - request.recv_ts
       }
@@ -87,7 +96,7 @@ defmodule KvStore.Observer do
     else 
       log_entry = KvStore.LogEntry.new(%{
         type: :get,
-        is_stale: check_staleness(Map.get(state.data, request.key, [%{id: 0, value: nil}]), request.req_id, request.object),
+        is_stale: check_staleness(Map.get(state.data, request.key, [%{id: 0, value: nil} | []]), request.req_id, request.object),
         kvnode: request.sender,
         # kvnode_latency: request.resp_ts - request.recv_ts
       })
@@ -106,9 +115,10 @@ defmodule KvStore.Observer do
 
   @spec log_put(%KvStore.Observer{}, %KvStore.PutRequestLog{}) :: %KvStore.Observer{}
   def log_put(state, request) do 
-    state = %{state | data: Map.put(state.data, request.key, [%{id: request.req_id, value: request.object} | Map.get(state.data, request.key, %{id: 0, value: nil})])}
+    state = %{state | data: Map.put(state.data, request.key, [%{id: request.req_id, value: request.object} | Map.get(state.data, request.key, [%{id: 0, value: nil} | []])])}
     if Map.has_key?(state.log, request.req_id) do 
       log_entry = %KvStore.LogEntry{state.log[request.req_id] | 
+        type: :put,
         kvnode: request.sender,
         # kvnode_latency: request.resp_ts - request.recv_ts
       }

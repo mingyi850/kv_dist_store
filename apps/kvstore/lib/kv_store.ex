@@ -184,10 +184,10 @@ alias KvStore.GetResponse
     result = Map.get(state.data, request.request.key, nil)
     if result == nil do
       Logger.warning("#{inspect(whoami())} Key not found: #{inspect(request.request.key)}")
-      send(sender, KvStore.InternalGetResponse.new(KvStore.GetResponse.new([]), request.index))
+      send(sender, KvStore.InternalGetResponse.new(KvStore.GetResponse.new([], request.request.req_id), request.index))
     else
       Logger.info("#{inspect(whoami())} Found key: #{inspect(request.request.key)}, with value #{inspect(result)}")
-      send(sender, KvStore.InternalGetResponse.new(KvStore.GetResponse.new(result), request.index))
+      send(sender, KvStore.InternalGetResponse.new(KvStore.GetResponse.new(result, request.request.req_id), request.index))
     end
     state
   end
@@ -230,7 +230,7 @@ alias KvStore.GetResponse
     client_request = request.request
     new_objects = [KvStore.CacheEntry.new(client_request.object, request.context)]
     state = update_data(state, client_request.key, new_objects)
-    send(sender, KvStore.InternalPutResponse.new(KvStore.PutResponse.new(request.context), request.index))
+    send(sender, KvStore.InternalPutResponse.new(KvStore.PutResponse.new(request.context, request.request.req_id), request.index))
     state
   end
 
@@ -262,10 +262,10 @@ alias KvStore.GetResponse
     responses = Map.get(state.request_responses, index, %{})
     Logger.debug("Responses for request: #{inspect(responses)}")
     context = hd(Map.values(responses)).context
-    send(request.request.sender, KvStore.PutResponse.new(context))
+    send(request.request.sender, KvStore.PutResponse.new(context, request.request.req_id))
 
     # send log to observer
-    send(state.observer, KvStore.PutRequestLog.new(request.req_id, request.request.key, request.request.object, whoami()))
+    send(state.observer, KvStore.PutRequestLog.new(request.request.req_id, request.request.key, request.request.object, whoami()))
 
     %{state |
       request_responses: Map.delete(state.request_responses, index),
@@ -305,14 +305,14 @@ alias KvStore.GetResponse
     Logger.debug("#{inspect(whoami())} Handling get response quorum for request: #{inspect(request)}")
     if response_count == state.read_quorum do
         responses = Map.get(state.request_responses, index, %{})
-        combined_response = get_updated_responses(responses)
+        combined_response = KvStore.GetResponse.new(get_updated_responses(responses), request.request.req_id)
         stale_nodes = get_stale_nodes(responses, combined_response)
         read_repair_request = KvStore.ReadRepairRequest.new(request.request.key, combined_response)
         broadcast(stale_nodes, read_repair_request)
         send(request.request.sender, combined_response)
 
         # send log to observer
-        send(state.observer, KvStore.GetRequestLog.new(request.req_id, request.request.key, combined_response.object, whoami()))
+        send(state.observer, KvStore.GetRequestLog.new(request.request.req_id, request.request.key, combined_response.objects, whoami()))
 
         %{state |
           request_responses: Map.delete(state.request_responses, index),
@@ -364,14 +364,16 @@ alias KvStore.GetResponse
     end)
   end
   #Compares all the responses for a given key and constructs a list of the most recent ones
-  @spec get_updated_responses(%{atom() => %GetResponse{}}) :: %GetResponse{}
+  # @spec get_updated_responses(%{atom() => %GetResponse{}}) :: %GetResponse{}
+  @spec get_updated_responses(%{atom() => %GetResponse{}}) :: [%KvStore.CacheEntry{}]
   defp get_updated_responses(responses) do
     #Get the most recent response
     Logger.info("Getting updated responses for responses: #{inspect(responses)}")
     cache_entries = Enum.flat_map(responses, fn {_, response} -> response.objects end)
     latest_entries = get_latest_entries(cache_entries)
     Logger.info("Latest entries: #{inspect(latest_entries)}")
-    KvStore.GetResponse.new(latest_entries)
+    # KvStore.GetResponse.new(latest_entries)
+    latest_entries
   end
 
   #Iterates through a list of cache_entries and returns the most recent cache_entries
