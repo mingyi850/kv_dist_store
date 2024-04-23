@@ -21,22 +21,28 @@ defmodule KvStore.Context do
 
 end
 
+'''
+`req_id` is the unique index given by load balancer to indicate the order of all requests
+'''
+
 defmodule KvStore.GetRequest do
 
   defstruct(
     key: "",
     sender: nil,
     original_recipient: nil,
-    type: :get
+    type: :get,
+    req_id: 0
   )
 
-  @spec new(String.t(), pid(), pid()) :: %KvStore.GetRequest{}
-  def new(key, sender, original_recipient) do
+  @spec new(String.t(), pid(), pid(), non_neg_integer()) :: %KvStore.GetRequest{}
+  def new(key, sender, original_recipient, req_id) do
     %KvStore.GetRequest{
       key: key,
       sender: sender,
       original_recipient: original_recipient,
-      type: :get
+      type: :get,
+      req_id: req_id
     }
   end
 
@@ -81,18 +87,20 @@ defmodule KvStore.PutRequest do
     contexts: [],
     sender: nil,
     original_recipient: nil,
-    type: :put
+    type: :put,
+    req_id: 0
   )
 
-  @spec new(String.t(), any(), [%KvStore.Context{}], pid(), pid()) :: %KvStore.PutRequest{}
-  def new(key, object, contexts, sender, original_recipient) do
+  @spec new(String.t(), any(), [%KvStore.Context{}], pid(), pid(), non_neg_integer()) :: %KvStore.PutRequest{}
+  def new(key, object, contexts, sender, original_recipient, req_id) do
     %KvStore.PutRequest{
       key: key,
       object: object,
       contexts: contexts,
       sender: sender,
       original_recipient: original_recipient,
-      type: :put
+      type: :put,
+      req_id: req_id
     }
   end
 end
@@ -274,20 +282,22 @@ defmodule KvStore.GetRequestLog do
     key: "",
     object: nil,
     sender: nil,
-    recv_ts: 0,
-    resp_ts: 0,
+    # recv_ts: 0,
+    # resp_ts: 0,
     type: :get_log
   )
 
-  @spec new(non_neg_integer(), String.t(), any(), pid(), non_neg_integer(), non_neg_integer()) :: %KvStore.GetRequestLog{}
-  def new(req_id, key, object, sender, recv_ts, resp_ts) do
+  # @spec new(non_neg_integer(), String.t(), any(), pid(), non_neg_integer(), non_neg_integer()) :: %KvStore.GetRequestLog{}
+  # def new(req_id, key, object, sender, recv_ts, resp_ts) do
+  @spec new(non_neg_integer(), String.t(), any(), pid()) :: %KvStore.GetRequestLog{}
+  def new(req_id, key, object, sender) do
     %KvStore.GetRequestLog{
       req_id: req_id,
       key: key,
       object: object,
       sender: sender,
-      recv_ts: recv_ts,
-      resp_ts: resp_ts,
+      # recv_ts: recv_ts,
+      # resp_ts: resp_ts,
       type: :get_log
     }
   end
@@ -304,20 +314,22 @@ defmodule KvStore.PutRequestLog do
     key: "",
     object: nil,
     sender: nil,
-    recv_ts: 0,
-    resp_ts: 0,
+    # recv_ts: 0,
+    # resp_ts: 0,
     type: :put_log
   )
 
-  @spec new(non_neg_integer(), String.t(), any(), pid(), non_neg_integer(), non_neg_integer()) :: %KvStore.PutRequestLog{}
-  def new(req_id, key, object, sender, recv_ts, resp_ts) do
+  # @spec new(non_neg_integer(), String.t(), any(), pid(), non_neg_integer(), non_neg_integer()) :: %KvStore.PutRequestLog{}
+  # def new(req_id, key, object, sender, recv_ts, resp_ts) do
+  @spec new(non_neg_integer(), String.t(), any(), pid()) :: %KvStore.PutRequestLog{}
+  def new(req_id, key, object, sender) do
     %KvStore.PutRequestLog{
       req_id: req_id,
       key: key,
       object: object,
       sender: sender,
-      recv_ts: recv_ts,
-      resp_ts: resp_ts,
+      # recv_ts: recv_ts,
+      # resp_ts: resp_ts,
       type: :put_log
     }
   end

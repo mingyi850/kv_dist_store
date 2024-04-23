@@ -18,7 +18,8 @@ defmodule KvStore.LoadBalancer do
     sorted_nodes: [],
     live_nodes: MapSet.new(),
     replication_factor: 1,
-    node_hashes: %{}
+    node_hashes: %{},
+    req_id: 0
   )
 
   @spec init([atom()], integer()) :: %KvStore.LoadBalancer{}
@@ -29,7 +30,8 @@ defmodule KvStore.LoadBalancer do
       sorted_nodes: sort_nodes(nodes),
       live_nodes: MapSet.new(nodes),
       replication_factor: replication_factor,
-      node_hashes: node_hashes
+      node_hashes: node_hashes,
+      req_id: 0
     }
   end
 
@@ -42,15 +44,15 @@ defmodule KvStore.LoadBalancer do
         preference_list = get_preference_list(key, state, state.replication_factor)
         node = Enum.random(preference_list)
         #TODO: Redirect messages to any node in the preference list instead of the first node.
-        send(node, KvStore.GetRequest.new(key, sender, original_node))
-        run(state)
+        send(node, KvStore.GetRequest.new(key, sender, original_node, state.req_id))
+        run(%{state | req_id: state.req_id + 1})
       {sender, {:put, key, object, context}} ->
         {original_node, _} = consistent_hash(key, state)
         preference_list = get_preference_list(key, state, state.replication_factor)
         node = Enum.random(preference_list)
         #TODO: Redirect messages to any node in the preference list instead of the first node.
-        send(node, KvStore.PutRequest.new(key, object, context, sender, original_node))
-        run(state)
+        send(node, KvStore.PutRequest.new(key, object, context, sender, original_node, state.req_id))
+        run(%{state | req_id: state.req_id + 1})
       {_, {:node_down, node}} ->
         state = %{state | live_nodes: MapSet.delete(state.live_nodes, node)}
         run(state)

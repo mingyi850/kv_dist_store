@@ -38,7 +38,8 @@ defmodule KvStore do
     max_retries: 3,
     heartbeat_counter: 1,
     peer_heartbeats: %{},
-    heartbeat_frequency: 500
+    heartbeat_frequency: 500,
+    observer: nil
   )
   @moduledoc """
   Documentation for `KvStore`.
@@ -46,8 +47,8 @@ defmodule KvStore do
 alias KvStore.FixedMerkleTree
 alias KvStore.GetResponse
 
-  @spec init([atom()], integer(), integer(), integer()) :: %KvStore{}
-  def init(nodes, replication_factor, read_quorum, write_quorum) do
+  @spec init([atom()], integer(), integer(), integer(), pid()) :: %KvStore{}
+  def init(nodes, replication_factor, read_quorum, write_quorum, observer) do
     node_hashes = Enum.map(nodes, fn node -> {node, hash(node)} end) |> Enum.into(%{})
     sorted_nodes = sort_nodes(nodes)
     %KvStore{
@@ -70,7 +71,8 @@ alias KvStore.GetResponse
       max_retries: 3,
       heartbeat_counter: 1,
       peer_heartbeats: %{},
-      heartbeat_frequency: 500
+      heartbeat_frequency: 500,
+      observer: observer
     }
   end
 
@@ -261,6 +263,10 @@ alias KvStore.GetResponse
     Logger.debug("Responses for request: #{inspect(responses)}")
     context = hd(Map.values(responses)).context
     send(request.request.sender, KvStore.PutResponse.new(context))
+
+    # send log to observer
+    send(state.observer, KvStore.PutRequestLog.new(request.req_id, request.request.key, request.request.object, whoami()))
+
     %{state |
       request_responses: Map.delete(state.request_responses, index),
       pending_requests: Map.delete(state.pending_requests, index),
@@ -304,6 +310,10 @@ alias KvStore.GetResponse
         read_repair_request = KvStore.ReadRepairRequest.new(request.request.key, combined_response)
         broadcast(stale_nodes, read_repair_request)
         send(request.request.sender, combined_response)
+
+        # send log to observer
+        send(state.observer, KvStore.GetRequestLog.new(request.req_id, request.request.key, combined_response.object, whoami()))
+
         %{state |
           request_responses: Map.delete(state.request_responses, index),
           pending_requests: Map.delete(state.pending_requests, index),

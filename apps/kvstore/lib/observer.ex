@@ -81,7 +81,7 @@ defmodule KvStore.Observer do
       log_entry = %KvStore.LogEntry{state.log[request.req_id] | 
         is_stale: check_staleness(Map.get(state.data, request.key, [%{id: 0, value: nil}]), request.req_id, request.object),
         kvnode: request.sender,
-        kvnode_latency: request.resp_ts - request.recv_ts
+        # kvnode_latency: request.resp_ts - request.recv_ts
       }
       %{state | log: Map.put(state.log, request.req_id, log_entry)}
     else 
@@ -89,7 +89,7 @@ defmodule KvStore.Observer do
         type: :get,
         is_stale: check_staleness(Map.get(state.data, request.key, [%{id: 0, value: nil}]), request.req_id, request.object),
         kvnode: request.sender,
-        kvnode_latency: request.resp_ts - request.recv_ts
+        # kvnode_latency: request.resp_ts - request.recv_ts
       })
       %{state | log: Map.put(state.log, request.req_id, log_entry)}
     end
@@ -106,18 +106,18 @@ defmodule KvStore.Observer do
 
   @spec log_put(%KvStore.Observer{}, %KvStore.PutRequestLog{}) :: %KvStore.Observer{}
   def log_put(state, request) do 
-    state = %{state | data: Map.put(state.data, request.key, [%{id: request.req_id, value: request.object} | state.data[request.key]])}
+    state = %{state | data: Map.put(state.data, request.key, [%{id: request.req_id, value: request.object} | Map.get(state.data, request.key, %{id: 0, value: nil})])}
     if Map.has_key?(state.log, request.req_id) do 
       log_entry = %KvStore.LogEntry{state.log[request.req_id] | 
         kvnode: request.sender,
-        kvnode_latency: request.resp_ts - request.recv_ts
+        # kvnode_latency: request.resp_ts - request.recv_ts
       }
       %{state | log: Map.put(state.log, request.req_id, log_entry)}
     else 
       log_entry = KvStore.LogEntry.new(%{
         type: :put,
         kvnode: request.sender,
-        kvnode_latency: request.resp_ts - request.recv_ts
+        # kvnode_latency: request.resp_ts - request.recv_ts
       })
       %{state | log: Map.put(state.log, request.req_id, log_entry)}
     end
