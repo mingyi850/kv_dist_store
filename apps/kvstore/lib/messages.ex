@@ -310,7 +310,7 @@ defmodule KvStore.PutRequestLog do
   )
 
   @spec new(non_neg_integer(), String.t(), any(), pid(), non_neg_integer(), non_neg_integer()) :: %KvStore.PutRequestLog{}
-  def new(req_id, key, object, sender) do
+  def new(req_id, key, object, sender, recv_ts, resp_ts) do
     %KvStore.PutRequestLog{
       req_id: req_id,
       key: key,
@@ -330,15 +330,17 @@ defmodule KvStore.ClientRequestLog do
 
   defstruct(
     req_id: 0,
+    sender: nil,
     send_ts: 0,
     recv_ts: 0,
     type: :client_log
   )
 
-  @spec new(non_neg_integer(), non_neg_integer(), non_neg_integer()) :: %KvStore.GetRequestLog{}
-  def new(req_id, send_ts, recv_ts) do
-    %KvStore.GetRequestLog{
+  @spec new(non_neg_integer(), pid(), non_neg_integer(), non_neg_integer()) :: %KvStore.ClientRequestLog{}
+  def new(req_id, sender, send_ts, recv_ts) do
+    %KvStore.ClientRequestLog{
       req_id: req_id,
+      sender: sender,
       send_ts: send_ts,
       recv_ts: recv_ts,
       type: :client_log
