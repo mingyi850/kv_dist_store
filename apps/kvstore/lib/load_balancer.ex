@@ -42,7 +42,7 @@ defmodule KvStore.LoadBalancer do
     Logger.info("Starting LoadBalancer with state #{inspect(state)}")
     receive do
       {sender, {:get, key}} ->
-        Logger.info("lb receive get from #{sender} (#{state.req_id})")
+        Logger.info("lb receive get from #{inspect(sender)} (#{state.req_id})")
         {original_node, _} = consistent_hash(key, state)
         preference_list = get_preference_list(key, state, state.replication_factor)
         node = Enum.random(preference_list)
@@ -50,7 +50,7 @@ defmodule KvStore.LoadBalancer do
         send(node, KvStore.GetRequest.new(key, sender, original_node, state.req_id))
         run(%{state | req_id: state.req_id + 1})
       {sender, {:put, key, object, context}} ->
-        Logger.info("lb receive put from #{sender}")
+        Logger.info("lb receive put from #{inspect(sender)}")
         {original_node, _} = consistent_hash(key, state)
         preference_list = get_preference_list(key, state, state.replication_factor)
         node = Enum.random(preference_list)

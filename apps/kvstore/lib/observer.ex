@@ -49,7 +49,7 @@ defmodule KvStore.Observer do
     stale_count: 0
   )
 
-  @spec init([atom()]) :: %KvStore.Observer{}
+  @spec init(atom()) :: %KvStore.Observer{}
   def init(node) do
     Logger.info("Initializing Observer with node: #{inspect(node)}")
     %KvStore.Observer{
@@ -62,22 +62,22 @@ defmodule KvStore.Observer do
 
   @spec run(%KvStore.Observer{}) :: %KvStore.Observer{}
   def run(state) do
-    Logger.info("Observer run with state #{inspect(state)}")
+    # Logger.info("Observer run with state #{inspect(state)}")
     receive do
       {_, %KvStore.GetRequestLog{} = request} -> 
         Logger.info("Observer receive (get) #{inspect(request)}")
         state = log_get(state, request)
-        Logger.info("Observer data: #{inspect(state.data)}, log: #{inspect(state.log)}")
+        # Logger.info("Observer data: #{inspect(state.data)}, log: #{inspect(state.log)}")
         run(state)
       {_, %KvStore.PutRequestLog{} = request} ->
         Logger.info("Observer receive (put) #{inspect(request)}")
         state = log_put(state, request)
-        Logger.info("Observer data: #{inspect(state.data)}, log: #{inspect(state.log)}")
+        # Logger.info("Observer data: #{inspect(state.data)}, log: #{inspect(state.log)}")
         run(state)
       {_, %KvStore.ClientRequestLog{} = request} -> 
         Logger.info("Observer receive (client) #{inspect(request)}")
         state = log_client(state, request)
-        Logger.info("Observer data: #{inspect(state.data)}, log: #{inspect(state.log)}")
+        # Logger.info("Observer data: #{inspect(state.data)}, log: #{inspect(state.log)}")
         run(state)
       {sender, :get_stale_stat} -> 
         Logger.info("Observer report stale stat to #{inspect(sender)}")
@@ -96,7 +96,9 @@ defmodule KvStore.Observer do
   @spec log_get(%KvStore.Observer{}, %KvStore.GetRequestLog{}) :: %KvStore.Observer{}
   def log_get(state, request) do 
     if Map.has_key?(state.log, request.req_id) do 
-      is_stale = check_staleness(Map.get(state.data, request.key, [%{id: 0, value: nil} | []]), request.req_id, request.object)
+      Logger.debug("in log_get #{inspect(request.object)}")
+      cache_entry = Enum.at(request.object, 0)
+      is_stale = check_staleness(Map.get(state.data, request.key, [%{id: 0, value: nil} | []]), request.req_id, cache_entry)
       log_entry = %KvStore.LogEntry{state.log[request.req_id] | 
         type: :get,
         is_stale: is_stale,
@@ -108,7 +110,8 @@ defmodule KvStore.Observer do
         stale_count: if is_stale do state.stale_count + 1 else state.stale_count end
         }
     else 
-      is_stale = check_staleness(Map.get(state.data, request.key, [%{id: 0, value: nil} | []]), request.req_id, request.object)
+      cache_entry = Enum.at(request.object, 0)
+      is_stale = check_staleness(Map.get(state.data, request.key, [%{id: 0, value: nil} | []]), request.req_id, cache_entry)
       log_entry = KvStore.LogEntry.new(%{
         type: :get,
         is_stale: is_stale,
@@ -124,11 +127,15 @@ defmodule KvStore.Observer do
 
   defp check_staleness(data, req_id, value) do
     [head | tail] = data
-    # Logger.debug("check_staleness: #{inspect(head)} <=> #{inspect(value)}")
+    # Logger.debug("check_staleness (#{req_id}): #{inspect(head)} <=> #{inspect(value)}")
     if req_id < head.id do 
       check_staleness(tail, req_id, value)
     else 
-      value != head.value
+      if value == nil do 
+        head.value != nil
+      else 
+        value.object != head.value
+      end
     end
   end
 

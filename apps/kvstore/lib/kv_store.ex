@@ -406,7 +406,7 @@ alias KvStore.GetResponse
     if request != nil do
       if retries >= state.max_retries do
         Logger.warning("#{inspect(whoami())} Timeout for request: #{inspect(index)}, max retries reached.")
-        send(request.reqeust.sender, KvStore.FailedResponse.new(request.request))
+        send(request.request.sender, KvStore.FailedResponse.new(request.request))
         state = remove_request(state, index)
         state
       else
