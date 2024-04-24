@@ -89,7 +89,8 @@ alias KvStore.GetResponse
         run(state)
       {_, %KvStore.PutRequest{} = request} ->
         state = handle_put_request(state, request)
-        #Logger.info("Current state: #{inspect(state)}")
+        # Logger.info("Current state: #{inspect(state)}")
+        Logger.debug("PutRequest: #{inspect(request)}")
         run(state)
       {sender, %KvStore.InternalGetRequest{} = request} ->
         state = handle_get_req_internal(state, request, sender)
@@ -129,7 +130,7 @@ alias KvStore.GetResponse
         state = handle_heartbeat(state, new_heartbeats, sender, req_resp)
         run(state)
       {_, :heartbeat_now} ->
-        Logger.debug("Got heartbeat_now command")
+        # Logger.debug("Got heartbeat_now command")
         state = send_heartbeat(state)
         timer = Emulation.timer(state.heartbeat_frequency, {whoami(), :heartbeat_now})
         state = %{state | timers: Map.put(state.timers, :heartbeat, timer)}
@@ -173,14 +174,14 @@ alias KvStore.GetResponse
       counter: state.counter + 1
     }
     preference_list = get_preference_list(request.key, state, state.replication_factor)
-    Logger.debug("Preference list: #{inspect(preference_list)}")
+    # Logger.debug("Preference list: #{inspect(preference_list)}")
     KvStore.Utils.broadcast(preference_list, internal_request)
     state
   end
 
   @spec handle_get_req_internal(%KvStore{}, %KvStore.InternalGetRequest{}, atom()) :: %KvStore{}
   def handle_get_req_internal(state, request, sender) do
-    Logger.debug("#{whoami()} Handling internal get request: #{inspect(request)}")
+    # Logger.debug("#{whoami()} Handling internal get request: #{inspect(request)}")
     result = Map.get(state.data, request.request.key, nil)
     if result == nil do
       Logger.warning("#{inspect(whoami())} Key not found: #{inspect(request.request.key)}")
@@ -197,7 +198,7 @@ alias KvStore.GetResponse
     request = Map.get(state.pending_requests, response.index, nil)
     if request != nil do
       existing_responses = Map.get(state.request_responses, response.index, %{})
-      Logger.debug("#{inspect(whoami())} Received response for request: #{inspect(request)}, currently have #{map_size(existing_responses)} responses.")
+      # Logger.debug("#{inspect(whoami())} Received response for request: #{inspect(request)}, currently have #{map_size(existing_responses)} responses.")
       appended_responses = Map.put(existing_responses, sender, response.response)
       state = %{state | request_responses: Map.put(state.request_responses, response.index, appended_responses)}
       response_count = map_size(appended_responses)
@@ -239,7 +240,7 @@ alias KvStore.GetResponse
     request = Map.get(state.pending_requests, response.index, nil)
     if request != nil do
       existing_responses = Map.get(state.request_responses, response.index, %{})
-      Logger.debug("#{inspect(whoami())} Received response for request: #{inspect(request)}, currently have #{map_size(existing_responses)} responses.")
+      # Logger.debug("#{inspect(whoami())} Received response for request: #{inspect(request)}, currently have #{map_size(existing_responses)} responses.")
       appended_responses = Map.put(existing_responses, sender, response.response)
       state = %{state | request_responses: Map.put(state.request_responses, response.index, appended_responses)}
       cond do
@@ -258,15 +259,11 @@ alias KvStore.GetResponse
 
   @spec handle_put_response_quorum(%KvStore{}, %KvStore.InternalPutRequest{}, integer()) :: %KvStore{}
   def handle_put_response_quorum(state, request, index) do
-    Logger.debug("#{inspect(whoami())} Handling put response quorum for request: #{inspect(request)}")
+    # Logger.debug("#{inspect(whoami())} Handling put response quorum for request: #{inspect(request)}")
     responses = Map.get(state.request_responses, index, %{})
-    Logger.debug("Responses for request: #{inspect(responses)}")
+    # Logger.debug("Responses for request: #{inspect(responses)}")
     context = hd(Map.values(responses)).context
     send(request.request.sender, KvStore.PutResponse.new(context, request.request.req_id))
-
-    # send log to observer
-    send(state.observer, KvStore.PutRequestLog.new(request.request.req_id, request.request.key, request.request.object, whoami()))
-
     %{state |
       request_responses: Map.delete(state.request_responses, index),
       pending_requests: Map.delete(state.pending_requests, index),
@@ -275,7 +272,7 @@ alias KvStore.GetResponse
 
   @spec handle_read_repair(%KvStore{}, %KvStore.ReadRepairRequest{}) :: %KvStore{}
   def handle_read_repair(state, request) do
-    Logger.debug("#{inspect(whoami())} Handling read repair request: #{inspect(request)}")
+    # Logger.debug("#{inspect(whoami())} Handling read repair request: #{inspect(request)}")
     update_data(state, request.key, request.objects)
   end
 
@@ -302,7 +299,7 @@ alias KvStore.GetResponse
 
   @spec handle_get_response_quorum(%KvStore{}, %KvStore.InternalGetRequest{}, integer(), integer()) :: %KvStore{}
   def handle_get_response_quorum(state, request, index, response_count) do
-    Logger.debug("#{inspect(whoami())} Handling get response quorum for request: #{inspect(request)}")
+    # Logger.debug("#{inspect(whoami())} Handling get response quorum for request: #{inspect(request)}")
     if response_count == state.read_quorum do
         responses = Map.get(state.request_responses, index, %{})
         combined_response = KvStore.GetResponse.new(get_updated_responses(responses), request.request.req_id)
@@ -454,7 +451,7 @@ alias KvStore.GetResponse
     state = %{state | peer_heartbeats: reconcile_heartbeats(state.peer_heartbeats, new_heartbeat_counter)}
     state = %{state | heartbeat_counter: Enum.max(Map.values(state.peer_heartbeats)) + 1}
     state = %{state | peer_heartbeats: Map.put(state.peer_heartbeats, whoami(), state.heartbeat_counter)}
-    Logger.debug("#{inspect(whoami())} Handling heartbeat from #{inspect(sender)} with new counter: #{inspect(state.heartbeat_counter)} - new heartbeats: #{inspect(state.peer_heartbeats)}")
+    # Logger.debug("#{inspect(whoami())} Handling heartbeat from #{inspect(sender)} with new counter: #{inspect(state.heartbeat_counter)} - new heartbeats: #{inspect(state.peer_heartbeats)}")
     if req_resp do
       msg = {:heartbeat, state.peer_heartbeats, false}
       send(sender, msg)
@@ -472,10 +469,10 @@ alias KvStore.GetResponse
     heartbeats = state.peer_heartbeats
     max_heartbeat = Enum.max(Map.values(heartbeats))
     down_nodes = Enum.filter(Map.keys(heartbeats), fn node -> max_heartbeat - Map.get(heartbeats, node) > 60 end)
-    Logger.debug("Down nodes: #{inspect(down_nodes)}")
+    # Logger.debug("Down nodes: #{inspect(down_nodes)}")
     live_nodes = MapSet.new(Enum.filter(state.sorted_nodes, fn node -> !Enum.member?(down_nodes, node) end))
     new_live_nodes = MapSet.difference(live_nodes, state.live_nodes)
-    Logger.debug("New live nodes: #{inspect(new_live_nodes)}")
+    # Logger.debug("New live nodes: #{inspect(new_live_nodes)}")
     state = %{state |
       live_nodes: live_nodes
     }
@@ -492,7 +489,7 @@ alias KvStore.GetResponse
 
   @spec build_merkle_tree(atom(), [atom()]) :: %KvStore.FixedMerkleTree{}
   def build_merkle_tree(node, sorted_nodes) do
-    Logger.debug("Building merkle tree for node: #{inspect(node)}")
+    # Logger.debug("Building merkle tree for node: #{inspect(node)}")
     range_start = hash(KvStore.Utils.get_previous_node(node, %{sorted_nodes: sorted_nodes}))
     range_end = hash(node)
     KvStore.FixedMerkleTree.build_tree(range_start, range_end, 4, 4)
@@ -500,7 +497,7 @@ alias KvStore.GetResponse
 
   @spec initiate_merkle_tree_sync(%KvStore{}, atom()) :: %KvStore{}
   def initiate_merkle_tree_sync(state, node) do
-    Logger.debug("Initiating merkle tree sync for node: #{inspect(node)}")
+    # Logger.debug("Initiating merkle tree sync for node: #{inspect(node)}")
     nodes_to_sync = get_responsible_range(node, state) |> MapSet.delete(node)
     syncing_nodes = Enum.map(nodes_to_sync, fn n -> {n, get_first_responsible_node(n, state)} end) ++ [{node, get_second_responsible_node(node, state)}]
     sync_map = Enum.reduce(syncing_nodes,
@@ -511,7 +508,7 @@ alias KvStore.GetResponse
         end)
       end
     )
-    Logger.debug("Sync map: #{inspect(sync_map)}")
+    # Logger.debug("Sync map: #{inspect(sync_map)}")
     # First live node which replicats to the node should initiate sync for it's own set of keys
     # if :a is responsible for [:d, :c, :a]: and all nodes are live, :d should sync it's replicas for :d to :a
     # if :a is responsible for [:d, :c, :a]: and :d is not live, :c should sync its replicas for [:d and :c] to :a
@@ -523,7 +520,7 @@ alias KvStore.GetResponse
       Enum.each(my_responsibilities, fn to_sync ->
         merkle_tree = Map.get(state.merkle_trees, to_sync, nil)
         if merkle_tree != nil do
-          Logger.debug("Starting sync for node: #{inspect(to_sync)} to node: #{inspect(node)}")
+          # Logger.debug("Starting sync for node: #{inspect(to_sync)} to node: #{inspect(node)}")
           send(node, KvStore.SyncMerkleTree.new(to_sync, [FixedMerkleTree.getHeader(merkle_tree)]))
         end
       end)
@@ -533,7 +530,7 @@ alias KvStore.GetResponse
 
   @spec handle_merkle_tree_sync(%KvStore{}, [%KvStore.MerkleTreeHeader{}], atom(), atom()) :: %KvStore{}
   def handle_merkle_tree_sync(state, headers, to_sync, sender) do
-    Logger.debug("#{inspect(whoami())} Handling merkle tree sync for node: #{inspect(to_sync)}")
+    # Logger.debug("#{inspect(whoami())} Handling merkle tree sync for node: #{inspect(to_sync)}")
     merkle_tree = Map.get(state.merkle_trees, to_sync, nil)
     if merkle_tree != nil do
       #Logger.debug("Merkle tree for node: #{inspect(whoami())} is: #{inspect(merkle_tree)}")
@@ -550,7 +547,7 @@ alias KvStore.GetResponse
 
   @spec handle_unsynced_merkle_tree(%KvStore{}, %KvStore.MerkleTreeHeader{}, atom(), atom()) :: %KvStore{}
   def handle_unsynced_merkle_tree(state, header, to_sync, sender) do
-    Logger.debug("#{inspect(whoami())}: Handling unsynced merkle tree for node: #{inspect(to_sync)} from node: #{inspect(sender)}")
+    # Logger.debug("#{inspect(whoami())}: Handling unsynced merkle tree for node: #{inspect(to_sync)} from node: #{inspect(sender)}")
     merkle_tree = Map.get(state.merkle_trees, to_sync, nil)
     matching_tree = FixedMerkleTree.find_matching_node(merkle_tree, header)
     if !matching_tree.is_leaf do
@@ -566,7 +563,7 @@ alias KvStore.GetResponse
 
   @spec handle_merkle_sync_complete(%KvStore{}, atom()) :: %KvStore{}
   def handle_merkle_sync_complete(state, node) do
-    Logger.debug("Handling merkle sync complete for node: #{inspect(node)}")
+    # Logger.debug("Handling merkle sync complete for node: #{inspect(node)}")
     state
   end
 
