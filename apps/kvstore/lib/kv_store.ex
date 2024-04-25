@@ -264,6 +264,10 @@ alias KvStore.GetResponse
     # Logger.debug("Responses for request: #{inspect(responses)}")
     context = hd(Map.values(responses)).context
     send(request.request.sender, KvStore.PutResponse.new(context, request.request.req_id))
+    
+    # send log to observer
+    send(state.observer, KvStore.PutRequestLog.new(request.request.req_id, request.request.key, request.request.object, whoami()))
+    
     %{state |
       request_responses: Map.delete(state.request_responses, index),
       pending_requests: Map.delete(state.pending_requests, index),

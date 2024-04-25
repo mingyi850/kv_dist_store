@@ -36,8 +36,7 @@ defmodule KvStore.Observer do
 
   '''
   `data`
-    map a key to a list that contain all put history. Each entries contain %{id, value}. 
-    The entries with larger id is in the front of the list. The end of the list should contain entry %{id: 0, value: nil}.
+    map key to value
   `log`
     map request id to %KvStore.LogEntry{}
   '''
@@ -98,7 +97,7 @@ defmodule KvStore.Observer do
     if Map.has_key?(state.log, request.req_id) do 
       Logger.debug("in log_get #{inspect(request.object)}")
       cache_entry = Enum.at(request.object, 0)
-      is_stale = check_staleness(Map.get(state.data, request.key, [%{id: 0, value: nil} | []]), request.req_id, cache_entry)
+      is_stale = check_staleness(Map.get(state.data, request.key, nil), cache_entry)
       log_entry = %KvStore.LogEntry{state.log[request.req_id] | 
         type: :get,
         is_stale: is_stale,
@@ -111,7 +110,7 @@ defmodule KvStore.Observer do
         }
     else 
       cache_entry = Enum.at(request.object, 0)
-      is_stale = check_staleness(Map.get(state.data, request.key, [%{id: 0, value: nil} | []]), request.req_id, cache_entry)
+      is_stale = check_staleness(Map.get(state.data, request.key, nil), cache_entry)
       log_entry = KvStore.LogEntry.new(%{
         type: :get,
         is_stale: is_stale,
@@ -125,23 +124,17 @@ defmodule KvStore.Observer do
     end
   end
 
-  defp check_staleness(data, req_id, value) do
-    [head | tail] = data
-    # Logger.debug("check_staleness (#{req_id}): #{inspect(head)} <=> #{inspect(value)}")
-    if req_id < head.id do 
-      check_staleness(tail, req_id, value)
+  defp check_staleness(data, value) do
+    if value == nil do 
+      data != nil
     else 
-      if value == nil do 
-        head.value != nil
-      else 
-        value.object != head.value
-      end
+      data != value.object
     end
   end
 
   @spec log_put(%KvStore.Observer{}, %KvStore.PutRequestLog{}) :: %KvStore.Observer{}
   def log_put(state, request) do 
-    state = %{state | data: Map.put(state.data, request.key, [%{id: request.req_id, value: request.object} | Map.get(state.data, request.key, [%{id: 0, value: nil} | []])])}
+    state = %{state | data: Map.put(state.data, request.key, request.object)}
     if Map.has_key?(state.log, request.req_id) do 
       log_entry = %KvStore.LogEntry{state.log[request.req_id] | 
         type: :put,

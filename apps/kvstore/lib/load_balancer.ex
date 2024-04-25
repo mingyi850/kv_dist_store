@@ -56,8 +56,6 @@ defmodule KvStore.LoadBalancer do
         node = Enum.random(preference_list)
         #TODO: Redirect messages to any node in the preference list instead of the first node.
         send(node, KvStore.PutRequest.new(key, object, context, sender, original_node, state.req_id))
-        # send log to observer
-        send(state.observer, KvStore.PutRequestLog.new(state.req_id, key, object, node))
         run(%{state | req_id: state.req_id + 1})
       {_, {:node_down, node}} ->
         state = %{state | live_nodes: MapSet.delete(state.live_nodes, node)}
@@ -67,24 +65,6 @@ defmodule KvStore.LoadBalancer do
         run(state)
       {sender, :get_live_nodes} ->
         sender |> send(state.live_nodes)
-        run(state)
-      # add messages that delay on put to create stale
-      {sender, {:put, key, object, context, :delay, delay_time}} -> 
-        Logger.info("delay for #{delay_time} in load_balancer (#{state.req_id})")
-        receive do 
-        after 
-          delay_time -> true
-        end
-        {original_node, _} = consistent_hash(key, state)
-        preference_list = get_preference_list(key, state, state.replication_factor)
-        node = Enum.random(preference_list)
-        send(whoami(), {node, KvStore.PutRequest.new(key, object, context, sender, original_node, state.req_id)})
-        # send log to observer
-        send(state.observer, KvStore.PutRequestLog.new(state.req_id, key, object, node))
-        run(%{state | req_id: state.req_id + 1})
-      {_, {node, request}} ->
-        Logger.info("lb receive delayed request (#{state.req_id})")
-        send(node, request)
         run(state)
       unknown ->
         Logger.error("LB Unknown message received: #{inspect(unknown)}")

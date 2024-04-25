@@ -104,64 +104,87 @@ defmodule TestCase do
 
     Logger.info("Spawned all nodes")
 
-    client_a = spawn(:client_a, fn -> TestCase.generate_requests(:lb, :observer, 25, 2, 1, 5, 1000) end)
-    client_b = spawn(:client_b, fn -> TestCase.generate_requests(:lb, :observer, 25, 2, 1, 5, 1000) end)
+    client_a = spawn(:client_a, fn -> TestCase.generate_requests(:lb, :observer, 1000, 2, 1, 5, 1000) end)
+    # client_b = spawn(:client_b, fn -> TestCase.generate_requests(:lb, :observer, 25, 2, 1, 5, 1000) end)
 
     monitor_a = Process.monitor(client_a)
-    monitor_b = Process.monitor(client_b)
+    # monitor_b = Process.monitor(client_b)
 
-    receive do
+    receive do 
       {:DOWN, ^monitor_a, _, _, _} -> 
         Logger.debug("client_a complete")
+        client_log = spawn(:client_log, fn -> 
+          send(:observer, :get_log)
+          receive do 
+            {_, logs} -> 
+              TestCase.latency_stat(logs)
+              TestCase.staleness_stat(logs)
+            unknown -> 
+              Logger.debug("client_log receive unknown msg #{inspect(unknown)}")
+          end
+        end)
+        monitor_log = Process.monitor(client_log)
         receive do 
-          {:DOWN, ^monitor_b, _, _, _} -> 
-            Logger.debug("client_b complete")
-            client_log = spawn(:client_log, fn -> 
-              send(:observer, :get_log)
-              receive do 
-                {_, logs} -> 
-                  TestCase.latency_stat(logs)
-                  TestCase.staleness_stat(logs)
-                unknown -> 
-                  Logger.debug("client_log receive unknown msg #{inspect(unknown)}")
-              end
-            end)
-            monitor_log = Process.monitor(client_log)
-            receive do 
-              {:DOWN, ^monitor_log, _, _, _} -> true
-            after 
-              10_000_000 -> assert false 
-            end
+          {:DOWN, ^monitor_log, _, _, _} -> true
         after 
-          1_000_000 -> assert false
-        end
-      {:DOWN, ^monitor_b, _, _, _} -> 
-        Logger.debug("client_b complete")
-        receive do 
-          {:DOWN, ^monitor_a, _, _, _} -> 
-            Logger.debug("client_a complete")
-            client_log = spawn(:client_log, fn -> 
-              send(:observer, :get_log)
-              receive do 
-                {_, logs} -> 
-                  TestCase.latency_stat(logs)
-                  TestCase.staleness_stat(logs)
-                unknown -> 
-                  Logger.debug("client_log receive unknown msg #{inspect(unknown)}")
-              end
-            end)
-            monitor_log = Process.monitor(client_log)
-            receive do 
-              {:DOWN, ^monitor_log, _, _, _} -> true
-            after 
-              10_000_000 -> assert false 
-            end
-        after 
-          1_000_000 -> assert false
+          10_000_000 -> assert false 
         end
     after
       10_000_000 -> assert false
     end
+
+    # receive do
+    #   {:DOWN, ^monitor_a, _, _, _} -> 
+    #     Logger.debug("client_a complete")
+    #     receive do 
+    #       {:DOWN, ^monitor_b, _, _, _} -> 
+    #         Logger.debug("client_b complete")
+    #         client_log = spawn(:client_log, fn -> 
+    #           send(:observer, :get_log)
+    #           receive do 
+    #             {_, logs} -> 
+    #               TestCase.latency_stat(logs)
+    #               TestCase.staleness_stat(logs)
+    #             unknown -> 
+    #               Logger.debug("client_log receive unknown msg #{inspect(unknown)}")
+    #           end
+    #         end)
+    #         monitor_log = Process.monitor(client_log)
+    #         receive do 
+    #           {:DOWN, ^monitor_log, _, _, _} -> true
+    #         after 
+    #           10_000_000 -> assert false 
+    #         end
+    #     after 
+    #       1_000_000 -> assert false
+    #     end
+    #   {:DOWN, ^monitor_b, _, _, _} -> 
+    #     Logger.debug("client_b complete")
+    #     receive do 
+    #       {:DOWN, ^monitor_a, _, _, _} -> 
+    #         Logger.debug("client_a complete")
+    #         client_log = spawn(:client_log, fn -> 
+    #           send(:observer, :get_log)
+    #           receive do 
+    #             {_, logs} -> 
+    #               TestCase.latency_stat(logs)
+    #               TestCase.staleness_stat(logs)
+    #             unknown -> 
+    #               Logger.debug("client_log receive unknown msg #{inspect(unknown)}")
+    #           end
+    #         end)
+    #         monitor_log = Process.monitor(client_log)
+    #         receive do 
+    #           {:DOWN, ^monitor_log, _, _, _} -> true
+    #         after 
+    #           10_000_000 -> assert false 
+    #         end
+    #     after 
+    #       1_000_000 -> assert false
+    #     end
+    # after
+    #   10_000_000 -> assert false
+    # end
 
   after
     Emulation.terminate()
