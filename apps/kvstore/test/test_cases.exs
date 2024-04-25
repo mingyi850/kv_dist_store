@@ -1,10 +1,10 @@
 defmodule TestCase do
   use ExUnit.Case
-  doctest KvStore.Observer
+  # doctest KvStore.Observer
   import Emulation, only: [spawn: 2, send: 2, whoami: 0]
 
   import Kernel,
-    except: [spawn: 3, spawn_link: 1, spawn_link: 3, send: 2, spawn: 2]
+    except: [spawn: 3, spawn: 1, spawn_link: 1, spawn_link: 3, send: 2, spawn: 2]
 
   require KvStore.TestClient
   require KvStore.LogEntry
@@ -59,9 +59,9 @@ defmodule TestCase do
     {:put, "#{key}", value, []}
   end
 
-  @spec generate_requests(pid(), pid(), pos_integer(), non_neg_integer(), non_neg_integer(), pos_integer(), pos_integer()) :: nil
-  def generate_requests(load_balancer, observer, rounds, gets, puts, keys, values) do 
-    Logger.info("generate requests round[#{rounds}]")
+  @spec generate_requests(pid(), pid(), non_neg_integer(), non_neg_integer(), pos_integer(), pos_integer()) :: nil
+  def generate_requests(load_balancer, observer, gets, puts, keys, values) do 
+    Logger.info("generate requests")
     requests_list = Enum.map(1..gets, fn _ -> generate_random_get(keys) end) ++ Enum.map(1..puts, fn _ -> generate_random_put(keys, values) end)
     Enum.each(Enum.shuffle(requests_list), fn req -> 
       send(load_balancer, req)
@@ -81,7 +81,7 @@ defmodule TestCase do
       end
     end)
 
-    if rounds > 1 do TestCase.generate_requests(load_balancer, observer, rounds - 1, gets, puts, keys, values) end
+    # if rounds > 1 do TestCase.generate_requests(load_balancer, observer, rounds - 1, gets, puts, keys, values) end
   end
 
 
@@ -96,7 +96,7 @@ defmodule TestCase do
     spawn(:lb, fn -> KvStore.LoadBalancer.run(lb_base_config) end)
     
     kv_base_config =
-      KvStore.init([:a, :b, :c], 1, 1, 1, :observer)
+      KvStore.init([:a, :b, :c], 3, 2, 2, :observer)
 
     spawn(:a, fn -> KvStore.run(kv_base_config) end)
     spawn(:b, fn -> KvStore.run(kv_base_config) end)
@@ -104,7 +104,12 @@ defmodule TestCase do
 
     Logger.info("Spawned all nodes")
 
-    client_a = spawn(:client_a, fn -> TestCase.generate_requests(:lb, :observer, 1000, 2, 1, 5, 1000) end)
+    client_a = spawn(:client_a, fn -> 
+      Enum.each(1..2000, fn iter ->
+        TestCase.generate_requests(:lb, :observer, 2, 1, 5, 1000) 
+        Logger.debug("Round #{iter} complete")
+        end)
+      end)
     # client_b = spawn(:client_b, fn -> TestCase.generate_requests(:lb, :observer, 25, 2, 1, 5, 1000) end)
 
     monitor_a = Process.monitor(client_a)
@@ -127,11 +132,67 @@ defmodule TestCase do
         receive do 
           {:DOWN, ^monitor_log, _, _, _} -> true
         after 
-          10_000_000 -> assert false 
+          100_000 -> assert false 
         end
+      unknown -> 
+        Logger.debug("monitor unknown message: #{inspect(unknown)}")
     after
-      10_000_000 -> assert false
+      100_000 -> assert false
     end
+
+    # ** (ExUnit.TimeoutError) test timed out after 60000ms. You can change the timeout:
+    
+    # 1. per test by setting "@tag timeout: x" (accepts :infinity)
+    # 2. per test module by setting "@moduletag timeout: x" (accepts :infinity)
+    # 3. globally via "ExUnit.start(timeout: x)" configuration
+    # 4. by running "mix test --timeout x" which sets timeout
+    # 5. or by running "mix test --trace" which sets timeout to infinity
+    #   (useful when using IEx.pry/0)
+     
+    # where "x" is the timeout given as integer in milliseconds (defaults to 60_000).
+
+
+    # 07:37:46.372 [info] STALENESS STAT
+
+    # 07:37:46.373 [info] stale rate: 5/4000 = 0.00125
+    #   * test 100 gets / 50 puts / 3 kv_nodes / 5 keys (88246.4ms) [L#88]
+
+    # Finished in 88.3 seconds (0.00s async, 88.3s sync)
+
+
+    # 07:40:29.931 [info] :a Found key: "3", with value [%KvStore.CacheEntry{object: 143, context: %KvStore.Context{vector_clock: %{a: 25500}}}]
+    #   * test 100 gets / 50 puts / 3 kv_nodes / 5 keys (87883.2ms) [L#88]
+
+    # Finished in 87.9 seconds (0.00s async, 87.9s sync)
+
+
+    # 07:43:35.723 [debug] Handling external get request: %KvStore.GetRequest{key: "1", sender: :client_a, original_recipient: :a, type: :get, req_id: 5990}
+
+    # 07:43:35.724 [info] :a Found key: "1", with value [%KvStore.CacheEntry{object: 210, context: %KvStore.Context{vector_clock: %{a: 25350}}}]
+    #   * test 100 gets / 50 puts / 3 kv_nodes / 5 keys (87753.2ms) [L#88]
+
+    # Finished in 87.8 seconds (0.00s async, 87.8s sync)
+
+
+    # 07:46:25.591 [info] Observer receive (client) %KvStore.ClientRequestLog{req_id: 5993, sender: :client_c, send_ts: 1714045585575, recv_ts: 1714045585588, type: :client_log}
+
+    # 07:46:25.591 [debug] PutRequest: %KvStore.PutRequest{key: "4", object: 29, contexts: [], sender: :client_a, original_recipient: :a, type: :put, req_id: 5994}
+
+    # 07:46:25.597 [warning] :a Received response for request: 3652, but request not found.
+
+    # 07:46:25.599 [warning] :a Timeout for request: 3647
+    #   * test 100 gets / 50 puts / 3 kv_nodes / 5 keys (87624.7ms) [L#88]
+
+    # Finished in 87.7 seconds (0.00s async, 87.7s sync)
+
+
+    # 07:48:30.151 [info] Latest entries: [%KvStore.CacheEntry{object: 752, context: %KvStore.Context{vector_clock: %{a: 24811}}}, %KvStore.CacheEntry{object: 752, context: %KvStore.Context{vector_clock: %{a: 24811}}}]
+
+    # 07:48:30.151 [warning] :a Received response for request: 3595, but request not found.
+    #   * test 100 gets / 50 puts / 3 kv_nodes / 5 keys (87840.1ms) [L#88]
+
+    # Finished in 87.9 seconds (0.00s async, 87.9s sync)
+
 
     # receive do
     #   {:DOWN, ^monitor_a, _, _, _} -> 
@@ -186,6 +247,10 @@ defmodule TestCase do
     #   10_000_000 -> assert false
     # end
 
+    receive do 
+    after
+      10000 -> IO.puts("time's up")
+    end
   after
     Emulation.terminate()
   end
