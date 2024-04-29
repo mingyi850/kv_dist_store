@@ -92,7 +92,7 @@ defmodule KvStoreTest do
 
     nodes = [:a, :b, :c, :d, :e]
     base_config =
-      KvStore.init(nodes, 3, 2, 2)
+      KvStore.init(nodes, 3, 2, 2, :observer)
 
     nodes |> Enum.each(fn node -> spawn(node, fn -> KvStore.run(base_config) end) end)
 

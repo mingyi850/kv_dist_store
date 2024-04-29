@@ -16,7 +16,7 @@ defmodule LoadBalancerTest do
     Emulation.init()
     Emulation.append_fuzzers([Fuzzers.delay(2)])
     base_config =
-      KvStore.LoadBalancer.init([:a, :b, :c], 1)
+      KvStore.LoadBalancer.init([:a, :b, :c], 1, :observer)
     Logger.info("Base config: #{inspect(base_config)}")
     spawn(:lb, fn -> KvStore.LoadBalancer.run(base_config) end)
     spawn(:a, fn -> KvStore.TestClient.kvStub() end)
@@ -51,7 +51,7 @@ defmodule LoadBalancerTest do
     Emulation.append_fuzzers([Fuzzers.delay(2)])
 
     base_config =
-      KvStore.LoadBalancer.init([:a, :b, :c], 1)
+      KvStore.LoadBalancer.init([:a, :b, :c], 1, :observer)
     Logger.info("Base config: #{inspect(base_config)}")
     spawn(:lb, fn -> KvStore.LoadBalancer.run(base_config) end)
     spawn(:a, fn -> KvStore.TestClient.kvStub() end)
