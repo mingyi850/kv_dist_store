@@ -1,6 +1,5 @@
 defmodule TestCase do
   use ExUnit.Case
-  # doctest KvStore.Observer
   import Emulation, only: [spawn: 2, send: 2, whoami: 0]
 
   import Kernel,
@@ -19,16 +18,20 @@ defmodule TestCase do
   '''
   @spec latency_stat(%KvStore.LogEntry{}) :: nil
   def latency_stat(logs) do 
-    Logger.info("LATENCY STAT")
+    # Logger.info("LATENCY STAT")
+    IO.puts("%% LATENCY STAT")
     # Logger.debug("logs: #{inspect(logs)}")
     latencies = Enum.map(logs, fn {req_id, log_entry} -> %{type: log_entry.type, latency: log_entry.latency} end)
-    Logger.info("latencies: #{inspect(latencies)}")
+    # Logger.info("latencies: #{inspect(latencies)}")
+    IO.puts("%% latencies: #{inspect(latencies)}")
 
     latencies_get = Enum.filter(latencies, fn %{type: t, latency: l} -> t == :get end) |> Enum.map(fn %{type: t, latency: l} -> l end)
-    Logger.info("latencies of get: #{inspect(latencies_get)}, mean: #{Enum.sum(latencies_get)/Enum.count(latencies_get)}")
+    # Logger.info("latencies of get: #{inspect(latencies_get)}, mean: #{Enum.sum(latencies_get)/Enum.count(latencies_get)}")
+    IO.puts("%% latencies of get: #{inspect(latencies_get)}, mean: #{Enum.sum(latencies_get)/Enum.count(latencies_get)}")
 
     latencies_put = Enum.filter(latencies, fn %{type: t, latency: l} -> t == :put end) |> Enum.map(fn %{type: t, latency: l} -> l end)
-    Logger.info("latencies of put: #{inspect(latencies_put)}, mean: #{Enum.sum(latencies_put)/Enum.count(latencies_put)}")
+    # Logger.info("latencies of put: #{inspect(latencies_put)}, mean: #{Enum.sum(latencies_put)/Enum.count(latencies_put)}")
+    IO.puts("%% latencies of put: #{inspect(latencies_put)}, mean: #{Enum.sum(latencies_put)/Enum.count(latencies_put)}")
   end
 
   '''
@@ -36,14 +39,17 @@ defmodule TestCase do
   '''
   @spec staleness_stat(%KvStore.LogEntry{}) :: nil
   def staleness_stat(logs) do 
-    Logger.info("STALENESS STAT")
+    # Logger.info("STALENESS STAT")
+    IO.puts("%% STALENESS STAT")
     logs_get = Enum.filter(logs, fn {req_id, log_entry} -> log_entry.type == :get end)
     get_count = Enum.count(logs_get)
     # Logger.info("logs of get: #{inspect(logs_get)} (total #{get_count} get requests)")
+    IO.puts("%% logs of get: #{inspect(logs_get)} (total #{get_count} get requests)")
     
     logs_stale = Enum.filter(logs, fn {req_id, log_entry} -> log_entry.is_stale end)
     stale_count = Enum.count(logs_stale)
-    Logger.info("stale rate: #{stale_count}/#{get_count} = #{stale_count/get_count}")
+    # Logger.info("stale rate: #{stale_count}/#{get_count} = #{stale_count/get_count}")
+    IO.puts("%% stale rate: #{stale_count}/#{get_count} = #{stale_count/get_count}")
   end
 
   @spec generate_random_get(pos_integer()) :: {}
@@ -80,177 +86,77 @@ defmodule TestCase do
           Logger.info("client receive unknown msg: #{inspect(unknown)}")
       end
     end)
-
-    # if rounds > 1 do TestCase.generate_requests(load_balancer, observer, rounds - 1, gets, puts, keys, values) end
   end
 
+  @spec handle_monitor(pos_integer()) :: nil
+  def handle_monitor(count) do
+    receive do 
+      {:DOWN, _, _, _, _} -> 
+        IO.puts("client complete")
+        if count - 1 > 0 do 
+          handle_monitor(count - 1)
+        else 
+          client_log = spawn(:client_log, fn -> 
+            send(:observer, :get_log)
+            receive do 
+              {_, logs} -> 
+                TestCase.latency_stat(logs)
+                TestCase.staleness_stat(logs)
+              unknown -> 
+                # Logger.debug("client_log receive unknown msg #{inspect(unknown)}")
+            end
+          end)
+          monitor_log = Process.monitor(client_log)
+          receive do 
+            {:DOWN, ^monitor_log, _, _, _} -> true
+          after 
+            100_000 -> assert false 
+          end
+        end
+      unknown -> 
+        IO.puts("monitor handler unknown message: #{inspect(unknown)}")
+    # after
+    #   100_000 -> assert false
+    end
+  end
 
-  test "100 gets / 50 puts / 3 kv_nodes / 5 keys" do
+  test "gets=2000__puts=1000__kvnodes=1(1,1,1)__keys=5__clients=2__delay=0" do
     Emulation.init()
-    Emulation.append_fuzzers([Fuzzers.delay(2)])
+    Emulation.append_fuzzers([Fuzzers.delay(0)])
     
+    # parameters
+    rep_factor = 1
+    r_quorum = 1
+    w_quorum = 1
+    kv_nodes = [:a]
+    clients = [:client_a, :client_b]
+
     spawn(:observer, fn -> KvStore.Observer.run(KvStore.Observer.init(:observer)) end)
     lb_base_config =
-      KvStore.LoadBalancer.init([:a, :b, :c], 1, :observer)
+      KvStore.LoadBalancer.init(kv_nodes, rep_factor, :observer)
     Logger.info("Base config: #{inspect(lb_base_config)}")
     spawn(:lb, fn -> KvStore.LoadBalancer.run(lb_base_config) end)
     
+    
     kv_base_config =
-      KvStore.init([:a, :b, :c], 3, 2, 2, :observer)
+      KvStore.init(kv_nodes, rep_factor, r_quorum, w_quorum, :observer)
 
-    spawn(:a, fn -> KvStore.run(kv_base_config) end)
-    spawn(:b, fn -> KvStore.run(kv_base_config) end)
-    spawn(:c, fn -> KvStore.run(kv_base_config) end)
+    Enum.each(kv_nodes, fn node -> spawn(node, fn -> KvStore.run(kv_base_config) end) end)
 
     Logger.info("Spawned all nodes")
 
-    client_a = spawn(:client_a, fn -> 
-      Enum.each(1..2000, fn iter ->
-        TestCase.generate_requests(:lb, :observer, 2, 1, 5, 1000) 
-        Logger.debug("Round #{iter} complete")
+    Enum.each(clients, fn client -> 
+      Process.monitor(
+        spawn(client, fn -> 
+          Enum.each(1..1000, fn iter ->
+            TestCase.generate_requests(:lb, :observer, 2, 1, 5, 1000) 
+            end)
         end)
-      end)
-    # client_b = spawn(:client_b, fn -> TestCase.generate_requests(:lb, :observer, 25, 2, 1, 5, 1000) end)
+      )
+    end)
 
-    monitor_a = Process.monitor(client_a)
-    # monitor_b = Process.monitor(client_b)
+    TestCase.handle_monitor(length(clients))
 
-    receive do 
-      {:DOWN, ^monitor_a, _, _, _} -> 
-        Logger.debug("client_a complete")
-        client_log = spawn(:client_log, fn -> 
-          send(:observer, :get_log)
-          receive do 
-            {_, logs} -> 
-              TestCase.latency_stat(logs)
-              TestCase.staleness_stat(logs)
-            unknown -> 
-              Logger.debug("client_log receive unknown msg #{inspect(unknown)}")
-          end
-        end)
-        monitor_log = Process.monitor(client_log)
-        receive do 
-          {:DOWN, ^monitor_log, _, _, _} -> true
-        after 
-          100_000 -> assert false 
-        end
-      unknown -> 
-        Logger.debug("monitor unknown message: #{inspect(unknown)}")
-    after
-      100_000 -> assert false
-    end
-
-    # ** (ExUnit.TimeoutError) test timed out after 60000ms. You can change the timeout:
-    
-    # 1. per test by setting "@tag timeout: x" (accepts :infinity)
-    # 2. per test module by setting "@moduletag timeout: x" (accepts :infinity)
-    # 3. globally via "ExUnit.start(timeout: x)" configuration
-    # 4. by running "mix test --timeout x" which sets timeout
-    # 5. or by running "mix test --trace" which sets timeout to infinity
-    #   (useful when using IEx.pry/0)
-     
-    # where "x" is the timeout given as integer in milliseconds (defaults to 60_000).
-
-
-    # 07:37:46.372 [info] STALENESS STAT
-
-    # 07:37:46.373 [info] stale rate: 5/4000 = 0.00125
-    #   * test 100 gets / 50 puts / 3 kv_nodes / 5 keys (88246.4ms) [L#88]
-
-    # Finished in 88.3 seconds (0.00s async, 88.3s sync)
-
-
-    # 07:40:29.931 [info] :a Found key: "3", with value [%KvStore.CacheEntry{object: 143, context: %KvStore.Context{vector_clock: %{a: 25500}}}]
-    #   * test 100 gets / 50 puts / 3 kv_nodes / 5 keys (87883.2ms) [L#88]
-
-    # Finished in 87.9 seconds (0.00s async, 87.9s sync)
-
-
-    # 07:43:35.723 [debug] Handling external get request: %KvStore.GetRequest{key: "1", sender: :client_a, original_recipient: :a, type: :get, req_id: 5990}
-
-    # 07:43:35.724 [info] :a Found key: "1", with value [%KvStore.CacheEntry{object: 210, context: %KvStore.Context{vector_clock: %{a: 25350}}}]
-    #   * test 100 gets / 50 puts / 3 kv_nodes / 5 keys (87753.2ms) [L#88]
-
-    # Finished in 87.8 seconds (0.00s async, 87.8s sync)
-
-
-    # 07:46:25.591 [info] Observer receive (client) %KvStore.ClientRequestLog{req_id: 5993, sender: :client_c, send_ts: 1714045585575, recv_ts: 1714045585588, type: :client_log}
-
-    # 07:46:25.591 [debug] PutRequest: %KvStore.PutRequest{key: "4", object: 29, contexts: [], sender: :client_a, original_recipient: :a, type: :put, req_id: 5994}
-
-    # 07:46:25.597 [warning] :a Received response for request: 3652, but request not found.
-
-    # 07:46:25.599 [warning] :a Timeout for request: 3647
-    #   * test 100 gets / 50 puts / 3 kv_nodes / 5 keys (87624.7ms) [L#88]
-
-    # Finished in 87.7 seconds (0.00s async, 87.7s sync)
-
-
-    # 07:48:30.151 [info] Latest entries: [%KvStore.CacheEntry{object: 752, context: %KvStore.Context{vector_clock: %{a: 24811}}}, %KvStore.CacheEntry{object: 752, context: %KvStore.Context{vector_clock: %{a: 24811}}}]
-
-    # 07:48:30.151 [warning] :a Received response for request: 3595, but request not found.
-    #   * test 100 gets / 50 puts / 3 kv_nodes / 5 keys (87840.1ms) [L#88]
-
-    # Finished in 87.9 seconds (0.00s async, 87.9s sync)
-
-
-    # receive do
-    #   {:DOWN, ^monitor_a, _, _, _} -> 
-    #     Logger.debug("client_a complete")
-    #     receive do 
-    #       {:DOWN, ^monitor_b, _, _, _} -> 
-    #         Logger.debug("client_b complete")
-    #         client_log = spawn(:client_log, fn -> 
-    #           send(:observer, :get_log)
-    #           receive do 
-    #             {_, logs} -> 
-    #               TestCase.latency_stat(logs)
-    #               TestCase.staleness_stat(logs)
-    #             unknown -> 
-    #               Logger.debug("client_log receive unknown msg #{inspect(unknown)}")
-    #           end
-    #         end)
-    #         monitor_log = Process.monitor(client_log)
-    #         receive do 
-    #           {:DOWN, ^monitor_log, _, _, _} -> true
-    #         after 
-    #           10_000_000 -> assert false 
-    #         end
-    #     after 
-    #       1_000_000 -> assert false
-    #     end
-    #   {:DOWN, ^monitor_b, _, _, _} -> 
-    #     Logger.debug("client_b complete")
-    #     receive do 
-    #       {:DOWN, ^monitor_a, _, _, _} -> 
-    #         Logger.debug("client_a complete")
-    #         client_log = spawn(:client_log, fn -> 
-    #           send(:observer, :get_log)
-    #           receive do 
-    #             {_, logs} -> 
-    #               TestCase.latency_stat(logs)
-    #               TestCase.staleness_stat(logs)
-    #             unknown -> 
-    #               Logger.debug("client_log receive unknown msg #{inspect(unknown)}")
-    #           end
-    #         end)
-    #         monitor_log = Process.monitor(client_log)
-    #         receive do 
-    #           {:DOWN, ^monitor_log, _, _, _} -> true
-    #         after 
-    #           10_000_000 -> assert false 
-    #         end
-    #     after 
-    #       1_000_000 -> assert false
-    #     end
-    # after
-    #   10_000_000 -> assert false
-    # end
-
-    receive do 
-    after
-      10000 -> IO.puts("time's up")
-    end
   after
     Emulation.terminate()
   end

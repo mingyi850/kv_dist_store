@@ -276,8 +276,9 @@ alias KvStore.GetResponse
 
   @spec handle_read_repair(%KvStore{}, %KvStore.ReadRepairRequest{}) :: %KvStore{}
   def handle_read_repair(state, request) do
-    # Logger.debug("#{inspect(whoami())} Handling read repair request: #{inspect(request)}")
-    update_data(state, request.key, request.objects)
+    Logger.debug("#{inspect(whoami())} Handling read repair request: #{inspect(request)}")
+    # update_data(state, request.key, request.objects)
+    update_data(state, request.key, request.entries.objects)
   end
 
   defp update_data(state, key, objects) do

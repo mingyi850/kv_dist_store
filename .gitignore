@@ -37,3 +37,6 @@
 /.eunit/
 /.swo
 /.swp
+
+# Test Results
+/logs/
