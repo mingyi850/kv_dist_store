@@ -102,17 +102,18 @@ defmodule KvStore.Observer do
   def log_get(state, request) do
     if Map.has_key?(state.log, request.req_id) do
       Logger.debug("in log_get #{inspect(request.object)}")
-      cache_entry = Enum.at(request.object, 0)
-      is_stale = check_staleness(Map.get(state.data, request.key, nil), cache_entry)
+      # cache_entry = Enum.at(request.object, 0)
+      # is_stale = check_staleness(Map.get(state.data, request.key, nil), cache_entry)
+      is_stale = check_staleness(Map.get(state.data, request.key, nil), request.object)
       if is_stale do
-        Logger.warning("Stale data 1: #{inspect(Map.get(state.data, request.key, nil))}, cache: #{inspect(cache_entry)}")
+        Logger.warning("Stale data 1: #{inspect(Map.get(state.data, request.key, nil))}, cache: #{inspect(request.object)}")
       end
       log_entry = %KvStore.LogEntry{state.log[request.req_id] |
         type: :get,
         is_stale: is_stale,
         kvnode: request.sender,
-        key: request.key,
-        value: request.object
+        key: request.key
+        # value: request.object
       }
       %{state |
         log: Map.put(state.log, request.req_id, log_entry),
@@ -120,17 +121,18 @@ defmodule KvStore.Observer do
         stale_count: if is_stale do state.stale_count + 1 else state.stale_count end
         }
     else
-      cache_entry = Enum.at(request.object, 0)
-      is_stale = check_staleness(Map.get(state.data, request.key, nil), cache_entry)
+      # cache_entry = Enum.at(request.object, 0)
+      # is_stale = check_staleness(Map.get(state.data, request.key, nil), cache_entry)
+      is_stale = check_staleness(Map.get(state.data, request.key, nil), request.object)
       if is_stale do
-        Logger.warning("Stale data 2: #{inspect(Map.get(state.data, request.key, nil))}, cache: #{inspect(cache_entry)}")
+        Logger.warning("Stale data 2: #{inspect(Map.get(state.data, request.key, nil))}, cache: #{inspect(request.object)}")
       end
       log_entry = KvStore.LogEntry.new(%{
         type: :get,
         is_stale: is_stale,
         kvnode: request.sender,
-        key: request.key,
-        value: request.object
+        key: request.key
+        # value: request.object
       })
       %{state |
         log: Map.put(state.log, request.req_id, log_entry),
@@ -140,11 +142,11 @@ defmodule KvStore.Observer do
     end
   end
 
-  defp check_staleness(data, value) do
-    if value == nil do
-      data != nil
-    else
-      data != value.object
+  defp check_staleness(data, objects) do
+    if data == nil do 
+      false
+    else 
+      !Enum.member?(Enum.map(objects, fn cache_entry -> cache_entry.object end), data)
     end
   end
 

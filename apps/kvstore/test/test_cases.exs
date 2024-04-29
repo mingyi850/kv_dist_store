@@ -64,37 +64,50 @@ defmodule TestCase do
   @spec generate_random_get(pos_integer()) :: {}
   def generate_random_get(keys) do
     key = Enum.random(1..keys)
-    {:get, "#{key}"}
+    {:get, "#{key}", nil}
   end
 
   @spec generate_random_put(pos_integer(), pos_integer()) :: {}
   def generate_random_put(keys, values) do
     key = Enum.random(1..keys)
     value = Enum.random(1..values)
-    {:put, "#{key}", value, []}
+    {:put, "#{key}", value}
   end
 
-  @spec generate_requests(pid(), pid(), non_neg_integer(), non_neg_integer(), pos_integer(), pos_integer()) :: nil
-  def generate_requests(load_balancer, observer, gets, puts, keys, values) do
-    Logger.info("generate requests")
-    requests_list = Enum.map(1..gets, fn _ -> generate_random_get(keys) end) ++ Enum.map(1..puts, fn _ -> generate_random_put(keys, values) end)
-    Enum.each(Enum.shuffle(requests_list), fn req ->
-      send(load_balancer, req)
-      send_ts = :os.system_time(:millisecond)
-      Logger.info("Send request #{inspect(req)}")
-      receive do
-        {sender, %KvStore.GetResponse{objects: objects, type: type, req_id: req_id}} ->
-          Logger.info("Receive response of #{req_id} from #{sender} with #{inspect(objects)}")
-          recv_ts = :os.system_time(:millisecond)
-          send(:observer, KvStore.ClientRequestLog.new(req_id, :client_c, send_ts, recv_ts))
-        {sender, %KvStore.PutResponse{context: context, type: type, req_id: req_id}} ->
-          Logger.info("Receive response of #{req_id} from #{sender} with context: #{inspect(context)}")
-          recv_ts = :os.system_time(:millisecond)
-          send(:observer, KvStore.ClientRequestLog.new(req_id, :client_b, send_ts, recv_ts))
-        unknown ->
-          Logger.info("client receive unknown msg: #{inspect(unknown)}")
-      end
-    end)
+  @spec generate_request(pid(), pid(), [], %{}) :: %{}
+  def generate_request(load_balancer, observer, requests_list, context_map) do 
+    [head | tail] = requests_list
+    {type, key, value} = head
+    send(load_balancer, if type == :get do {type, key} else {type, key, value, Map.get(context_map, key, [])} end)
+    send_ts = :os.system_time(:millisecond)
+    Logger.info("Send request #{inspect(key)} - #{inspect(value)} - #{inspect(Map.get(context_map, key, []))}")
+    receive do
+      {sender, %KvStore.GetResponse{objects: objects, type: type, req_id: req_id}} ->
+        Logger.info("Receive response of #{req_id} from #{sender} with #{inspect(objects)}")
+        recv_ts = :os.system_time(:millisecond)
+        send(:observer, KvStore.ClientRequestLog.new(req_id, :client_c, send_ts, recv_ts))
+        context_map = Map.put(context_map, key, Enum.map(objects, fn obj -> obj.context end))
+        Logger.debug("context_map: #{inspect(context_map)}")
+        if length(tail) > 0 do generate_request(load_balancer, observer, tail, context_map) else context_map end
+      {sender, %KvStore.PutResponse{context: context, type: type, req_id: req_id}} ->
+        Logger.info("Receive response of #{req_id} from #{sender} with context: #{inspect(context)}")
+        recv_ts = :os.system_time(:millisecond)
+        send(:observer, KvStore.ClientRequestLog.new(req_id, :client_b, send_ts, recv_ts))
+        context_map = Map.put(context_map, key, [context | []])
+        if length(tail) > 0 do generate_request(load_balancer, observer, tail, context_map) else context_map end
+      unknown ->
+        Logger.info("client receive unknown msg: #{inspect(unknown)}")
+    end
+  end
+
+  @spec generate_requests(non_neg_integer(), pid(), pid(), non_neg_integer(), non_neg_integer(), pos_integer(), pos_integer(), %{}) :: nil
+  def generate_requests(round, load_balancer, observer, gets, puts, keys, values, context_map) do
+    Logger.info("generate requests round[#{round}]")
+    requests_list = Enum.shuffle(Enum.map(1..gets, fn _ -> generate_random_get(keys) end) ++ Enum.map(1..puts, fn _ -> generate_random_put(keys, values) end))
+    
+    context_map = generate_request(load_balancer, observer, requests_list, context_map)
+
+    if round - 1 > 0 do generate_requests(round - 1, load_balancer, observer, gets, puts, keys, values, context_map) end
   end
 
   @spec handle_monitor(pos_integer()) :: nil
@@ -129,9 +142,9 @@ defmodule TestCase do
     end
   end
 
-  test "rounds=1000__gets=2__puts=1__kvnodes=3(3,3,3)__keys=5__clients=2__delay=0" do
+  test "rounds=1000__gets=2__puts=1__kvnodes=3(3,3,3)__keys=5__clients=2__delay=2" do
     Emulation.init()
-    Emulation.append_fuzzers([Fuzzers.delay(0)])
+    Emulation.append_fuzzers([Fuzzers.delay(2)])
 
     # parameters
     rounds = 1000
@@ -161,9 +174,7 @@ defmodule TestCase do
     Enum.each(clients, fn client ->
       Process.monitor(
         spawn(client, fn ->
-          Enum.each(1..rounds, fn iter ->
-            TestCase.generate_requests(:lb, :observer, gets, puts, keys, 1000)
-            end)
+          TestCase.generate_requests(rounds, :lb, :observer, gets, puts, keys, 1000, %{})
         end)
       )
     end)
