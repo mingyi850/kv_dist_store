@@ -230,6 +230,7 @@ alias KvStore.GetResponse
   def handle_put_req_internal(state, request, sender) do
     client_request = request.request
     new_objects = [KvStore.CacheEntry.new(client_request.object, request.context)]
+    Logger.info("New objects are #{inspect(new_objects)}")
     state = update_data(state, client_request.key, new_objects)
     send(sender, KvStore.InternalPutResponse.new(KvStore.PutResponse.new(request.context, request.request.req_id), request.index))
     state
@@ -264,10 +265,10 @@ alias KvStore.GetResponse
     # Logger.debug("Responses for request: #{inspect(responses)}")
     context = hd(Map.values(responses)).context
     send(request.request.sender, KvStore.PutResponse.new(context, request.request.req_id))
-    
+
     # send log to observer
     send(state.observer, KvStore.PutRequestLog.new(request.request.req_id, request.request.key, request.request.object, whoami()))
-    
+
     %{state |
       request_responses: Map.delete(state.request_responses, index),
       pending_requests: Map.delete(state.pending_requests, index),
@@ -381,8 +382,10 @@ alias KvStore.GetResponse
   #Iterates through a list of cache_entries and returns the most recent cache_entries
   @spec get_latest_entries([%KvStore.CacheEntry{}]) :: [%KvStore.CacheEntry{}]
   defp get_latest_entries(cache_entries) do
+    #Logger.info("Getting latest entries between #{inspect(cache_entries)}")
     to_exclude = get_exclude_list(cache_entries, cache_entries, MapSet.new())
-    Enum.filter(cache_entries, fn entry -> !MapSet.member?(to_exclude, entry.object) end)
+    #Logger.info("Excluding entries: #{inspect(to_exclude)}")
+    Enum.filter(cache_entries, fn entry -> !MapSet.member?(to_exclude, entry) end)
   end
 
   @spec get_exclude_list([%KvStore.CacheEntry{}], [%KvStore.CacheEntry{}], MapSet.t()) :: MapSet.t()
@@ -395,7 +398,7 @@ alias KvStore.GetResponse
       to_exclude = Enum.filter(all_entries, fn entry -> KvStore.Utils.compare_contexts(entry.context, head.context) == :before end)
       # if any context is after current context, add current to exclude list
       exclude_list = if Enum.any?(all_entries, fn entry -> KvStore.Utils.compare_contexts(entry.context, head.context) == :after end) do
-        MapSet.put(exclude, head.object)
+        MapSet.put(exclude, head)
       else
         exclude
       end

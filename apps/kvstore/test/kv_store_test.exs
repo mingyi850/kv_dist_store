@@ -19,22 +19,60 @@ defmodule KvStoreTest do
     Emulation.append_fuzzers([Fuzzers.delay(2)])
 
     base_config =
-      KvStore.init([:a, :b, :c], 1, 1, 1)
+      KvStore.init([:a, :b, :c], 1, 1, 1, :observer)
 
     spawn(:a, fn -> KvStore.run(base_config) end)
 
     client =
       spawn(:client, fn ->
-        first = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a), :a)
+        first = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a, 1), :a)
         Logger.info("Got first as #{inspect(first)}")
         assert first.objects == []
-        second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new("key1", 123, [], :client, :a), :a)
+        second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new("key1", 123, [], :client, :a, 2), :a)
         Logger.info("Got second as #{inspect(second)}")
         assert second.context != nil
-        third = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a), :a)
+        third = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a, 3), :a)
         Logger.info("Got third as #{inspect(third)}")
         assert third.objects != []
         assert hd(third.objects).object == 123
+      end)
+    handle = Process.monitor(client)
+
+    #Timeout.
+    receive do
+      {:DOWN, ^handle, _, _, _} -> true
+    after
+      10_000 -> assert false
+    end
+  after
+    Emulation.terminate()
+  end
+
+  test "KV Store receives and processes updates without context" do
+    Emulation.init()
+    Emulation.append_fuzzers([Fuzzers.delay(2)])
+
+    base_config =
+      KvStore.init([:a, :b, :c], 1, 1, 1, :observer)
+
+    spawn(:a, fn -> KvStore.run(base_config) end)
+
+    client =
+      spawn(:client, fn ->
+        first = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a, 1), :a)
+        Logger.info("Got first as #{inspect(first)}")
+        assert first.objects == []
+        second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new("key1", 123, [], :client, :a, 2), :a)
+        Logger.info("Got second as #{inspect(second)}")
+        assert second.context != nil
+        third = KvStore.TestClient.testClientSend(KvStore.PutRequest.new("key1", 123, [], :client, :a, 3), :a)
+        Logger.info("Got second as #{inspect(second)}")
+        assert third.context != nil
+        fourth = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a, 4), :a)
+        Logger.info("Got third as #{inspect(third)}")
+        assert fourth.objects != []
+        assert length(fourth.objects) == 1
+        assert hd(fourth.objects).object == 123
       end)
     handle = Process.monitor(client)
 
@@ -60,13 +98,13 @@ defmodule KvStoreTest do
 
     client =
       spawn(:client, fn ->
-        first = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a), :b)
+        first = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a, 1), :b)
         Logger.info("Got first as #{inspect(first)}")
         assert first.objects == []
-        second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new("key1", 123, [], :client, :a), :a)
+        second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new("key1", 123, [], :client, :a, 2), :a)
         Logger.info("Got second as #{inspect(second)}")
         assert second.context != nil
-        third = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a), :c)
+        third = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a, 3), :c)
         Logger.info("Got third as #{inspect(third)}")
         assert third.objects != []
         assert hd(third.objects).object == 123
@@ -89,19 +127,19 @@ defmodule KvStoreTest do
 
     nodes = [:a, :b, :c, :d, :e]
     base_config =
-      KvStore.init(nodes, 3, 2, 2)
+      KvStore.init(nodes, 3, 2, 2, :observer)
 
     nodes |> Enum.each(fn node -> spawn(node, fn -> KvStore.run(base_config) end) end)
 
     client =
       spawn(:client, fn ->
-        first = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a), :b)
+        first = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a, 1), :b)
         Logger.info("Got first as #{inspect(first)}")
         assert first.objects == []
-        second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new("key1", 123, [], :client, :a), :a)
+        second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new("key1", 123, [], :client, :a, 2), :a)
         Logger.info("Got second as #{inspect(second)}")
         assert second.context != nil
-        third = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a), :c)
+        third = KvStore.TestClient.testClientSend(KvStore.GetRequest.new("key1", :client, :a, 3), :c)
         Logger.info("Got third as #{inspect(third)}")
         assert third.objects != []
         assert hd(third.objects).object == 123
@@ -144,7 +182,7 @@ defmodule KvStoreTest do
 
     nodes = [:a, :b, :c, :d, :e]
     base_config =
-      KvStore.init(nodes, 3, 2, 2)
+      KvStore.init(nodes, 3, 2, 2, :observer)
 
     sorted_nodes = KvStore.Utils.sort_nodes(nodes)
     node_hashes = Enum.map(nodes, fn node -> {node, hash(node)} end) |> Enum.into(%{})
@@ -164,12 +202,12 @@ defmodule KvStoreTest do
         #Kill :a
         send(:a, :node_down)
         #Populate Nodes
-        first = KvStore.TestClient.testClientSend(KvStore.PutRequest.new(owned_key, 123, [], :client, :a), :b)
+        first = KvStore.TestClient.testClientSend(KvStore.PutRequest.new(owned_key, 123, [], :client, :a, 1), :b)
         Logger.info("Got first as #{inspect(first)}")
-        second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new(replicated_key, 23123, [], :client, :a), :c)
+        second = KvStore.TestClient.testClientSend(KvStore.PutRequest.new(replicated_key, 23123, [], :client, :a, 2), :c)
         assert first.context != nil
         assert second.context != nil
-        third = KvStore.TestClient.testClientSend(KvStore.GetRequest.new(owned_key, :client, :a), :b)
+        third = KvStore.TestClient.testClientSend(KvStore.GetRequest.new(owned_key, :client, :a, 3), :b)
         Logger.info("Got third as #{inspect(third)}")
         assert hd(third.objects).object == 123
 
