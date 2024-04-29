@@ -214,7 +214,7 @@ defmodule KvStore.ReadRepairRequest do
     type: :read_repair
   )
 
-  @spec new(String.t(), [%KvStore.CacheEntry{}]) :: %KvStore.ReadRepairRequest{}
+  @spec new(String.t(), %KvStore.GetResponse{}) :: %KvStore.ReadRepairRequest{}
   def new(key, entries) do
     %KvStore.ReadRepairRequest{
       key: key,

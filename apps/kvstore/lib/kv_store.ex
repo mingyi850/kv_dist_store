@@ -213,7 +213,8 @@ alias KvStore.GetResponse
 
   @spec handle_put_request(%KvStore{}, %KvStore.PutRequest{}) :: %KvStore{}
   def handle_put_request(state, request) do
-    updated_context = get_updated_context(state, request)
+    existing = Map.get(state.data, request.key, [])
+    updated_context = get_updated_context(state, request, existing)
     state = %{state | clock: updated_context.vector_clock}
     preference_list = get_preference_list(request.key, state, state.replication_factor)
     internal_request = KvStore.InternalPutRequest.new(request, updated_context, state.counter)
@@ -296,13 +297,11 @@ alias KvStore.GetResponse
   end
 
   #Combines current clock with node's clock to get latest clock
-  @spec get_updated_context(%KvStore{}, %KvStore.PutRequest{}) :: %KvStore.Context{}
-  defp get_updated_context(state, request) do
-    if request.contexts != [] do
-      KvStore.Context.new(combine_vector_clocks([state.clock | Enum.map(request.contexts, fn ctx -> ctx.vector_clock end)]))
-    else
-      KvStore.Context.new(state.clock)
-    end
+  @spec get_updated_context(%KvStore{}, %KvStore.PutRequest{}, [%KvStore.CacheEntry{}]) :: %KvStore.Context{}
+  defp get_updated_context(state, request, existing) do
+    existing_contexts = Enum.map(existing, fn entry -> entry.context end)
+    all_contexts = existing_contexts ++ request.contexts
+    KvStore.Context.new(combine_vector_clocks([state.clock | Enum.map(all_contexts, fn ctx -> ctx.vector_clock end)]))
   end
 
   @spec handle_get_response_quorum(%KvStore{}, %KvStore.InternalGetRequest{}, integer(), integer()) :: %KvStore{}
