@@ -86,11 +86,11 @@ defmodule TestCase do
         {sender, %KvStore.GetResponse{objects: objects, type: type, req_id: req_id}} ->
           Logger.info("Receive response of #{req_id} from #{sender} with #{inspect(objects)}")
           recv_ts = :os.system_time(:millisecond)
-          #send(:observer, KvStore.ClientRequestLog.new(req_id, :client_c, send_ts, recv_ts))
+          send(:observer, KvStore.ClientRequestLog.new(req_id, :client_c, send_ts, recv_ts))
         {sender, %KvStore.PutResponse{context: context, type: type, req_id: req_id}} ->
           Logger.info("Receive response of #{req_id} from #{sender} with context: #{inspect(context)}")
           recv_ts = :os.system_time(:millisecond)
-          #send(:observer, KvStore.ClientRequestLog.new(req_id, :client_b, send_ts, recv_ts))
+          send(:observer, KvStore.ClientRequestLog.new(req_id, :client_b, send_ts, recv_ts))
         unknown ->
           Logger.info("client receive unknown msg: #{inspect(unknown)}")
       end
@@ -129,15 +129,19 @@ defmodule TestCase do
     end
   end
 
-  test "gets=2000__puts=1000__kvnodes=1(1,1,1)__keys=5__clients=2__delay=0" do
+  test "rounds=1000__gets=2__puts=1__kvnodes=3(3,3,3)__keys=5__clients=2__delay=0" do
     Emulation.init()
     Emulation.append_fuzzers([Fuzzers.delay(0)])
 
     # parameters
-    rep_factor = 1
-    r_quorum = 1
-    w_quorum = 1
-    kv_nodes = [:a]
+    rounds = 1000
+    gets = 2
+    puts = 1
+    keys = 5
+    rep_factor = 3
+    r_quorum = 3
+    w_quorum = 3
+    kv_nodes = [:a, :b, :c]
     clients = [:client_a, :client_b]
 
     spawn(:observer, fn -> KvStore.Observer.run(KvStore.Observer.init(:observer)) end)
@@ -157,8 +161,8 @@ defmodule TestCase do
     Enum.each(clients, fn client ->
       Process.monitor(
         spawn(client, fn ->
-          Enum.each(1..1000, fn iter ->
-            TestCase.generate_requests(:lb, :observer, 2, 1, 5, 1000)
+          Enum.each(1..rounds, fn iter ->
+            TestCase.generate_requests(:lb, :observer, gets, puts, keys, 1000)
             end)
         end)
       )
