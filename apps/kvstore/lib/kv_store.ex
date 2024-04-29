@@ -373,12 +373,17 @@ alias KvStore.GetResponse
     #Get the most recent response
     Logger.info("Getting updated responses for responses: #{inspect(responses)}")
     cache_entries = Enum.flat_map(responses, fn {_, response} -> response.objects end)
+    cache_entries = deduplicate_entries(cache_entries)
     latest_entries = get_latest_entries(cache_entries)
     Logger.info("Latest entries: #{inspect(latest_entries)}")
     # KvStore.GetResponse.new(latest_entries)
     latest_entries
   end
 
+  @spec deduplicate_entries([%KvStore.CacheEntry{}]) :: [%KvStore.CacheEntry{}]
+  def deduplicate_entries(entries) do
+    Enum.uniq_by(entries, fn entry -> entry.context end)
+  end
   #Iterates through a list of cache_entries and returns the most recent cache_entries
   @spec get_latest_entries([%KvStore.CacheEntry{}]) :: [%KvStore.CacheEntry{}]
   defp get_latest_entries(cache_entries) do
