@@ -39,7 +39,6 @@ defmodule KvStore.LoadBalancer do
 
   @spec run(%KvStore.LoadBalancer{}) :: %KvStore.LoadBalancer{}
   def run(state) do
-    Logger.info("Starting LoadBalancer with state #{inspect(state)}")
     receive do
       {sender, {:get, key}} ->
         Logger.info("lb receive get from #{inspect(sender)} (#{state.req_id})")

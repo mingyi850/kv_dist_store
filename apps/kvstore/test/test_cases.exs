@@ -75,7 +75,7 @@ defmodule TestCase do
   end
 
   @spec generate_request(pid(), pid(), [], %{}) :: %{}
-  def generate_request(load_balancer, observer, requests_list, context_map) do 
+  def generate_request(load_balancer, observer, requests_list, context_map) do
     [head | tail] = requests_list
     {type, key, value} = head
     send(load_balancer, if type == :get do {type, key} else {type, key, value, Map.get(context_map, key, [])} end)
@@ -104,7 +104,7 @@ defmodule TestCase do
   def generate_requests(round, load_balancer, observer, gets, puts, keys, values, context_map) do
     Logger.info("generate requests round[#{round}]")
     requests_list = Enum.shuffle(Enum.map(1..gets, fn _ -> generate_random_get(keys) end) ++ Enum.map(1..puts, fn _ -> generate_random_put(keys, values) end))
-    
+
     context_map = generate_request(load_balancer, observer, requests_list, context_map)
 
     if round - 1 > 0 do generate_requests(round - 1, load_balancer, observer, gets, puts, keys, values, context_map) end
@@ -155,7 +155,7 @@ defmodule TestCase do
     r_quorum = 2
     w_quorum = 2
     kv_nodes = [:a, :b, :c]
-    clients = [:client_a]
+    clients = [:client_a, :client_b]
 
     spawn(:observer, fn -> KvStore.Observer.run(KvStore.Observer.init(:observer)) end)
     lb_base_config =
