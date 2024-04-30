@@ -178,7 +178,6 @@ defmodule KvStore.Observer do
   end
 
   defp check_staleness(data, ts, objects) do
-    #Fix - data not guaranteed to be in timestamp order. Need to find all. Use min by maybe
     IO.puts("Finding first before for #{ts} in #{inspect(data)}")
     first_put_end = find_first_before(data, ts, nil)
     IO.puts("Got first put end #{inspect(first_put_end)}")

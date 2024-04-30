@@ -28,10 +28,11 @@ defmodule TestCase do
     latencies_get = Enum.filter(latencies, fn %{type: t, latency: l} -> t == :get end) |> Enum.map(fn %{type: t, latency: l} -> l end)
     # Logger.info("latencies of get: #{inspect(latencies_get)}, mean: #{Enum.sum(latencies_get)/Enum.count(latencies_get)}")
     IO.puts("%% latencies of get: #{inspect(latencies_get)}, mean: #{Enum.sum(latencies_get)/Enum.count(latencies_get)}")
-
+    IO.puts("%% Average Latency of get: #{Enum.sum(latencies_get)/Enum.count(latencies_get)}")
     latencies_put = Enum.filter(latencies, fn %{type: t, latency: l} -> t == :put end) |> Enum.map(fn %{type: t, latency: l} -> l end)
     # Logger.info("latencies of put: #{inspect(latencies_put)}, mean: #{Enum.sum(latencies_put)/Enum.count(latencies_put)}")
     IO.puts("%% latencies of put: #{inspect(latencies_put)}, mean: #{Enum.sum(latencies_put)/Enum.count(latencies_put)}")
+    IO.puts("%% Average Latency of put: #{Enum.sum(latencies_put)/Enum.count(latencies_put)}")
   end
 
   '''
@@ -152,8 +153,8 @@ defmodule TestCase do
     puts = 1
     keys = 1
     rep_factor = 3
-    r_quorum = 2
-    w_quorum = 2
+    r_quorum = 1
+    w_quorum = 1
     kv_nodes = [:a, :b, :c]
     clients = [:client_a, :client_b]
 
