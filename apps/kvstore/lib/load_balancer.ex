@@ -48,6 +48,8 @@ defmodule KvStore.LoadBalancer do
         node = Enum.random(preference_list)
         #TODO: Redirect messages to any node in the preference list instead of the first node.
         send(node, KvStore.GetRequest.new(key, sender, original_node, state.req_id))
+        # send actual get_timestamp to observer
+        send(state.observer, {:get_start_time, state.req_id, :os.system_time(:millisecond)})
         run(%{state | req_id: state.req_id + 1})
       {sender, {:put, key, object, context}} ->
         Logger.info("lb receive put from #{inspect(sender)}")

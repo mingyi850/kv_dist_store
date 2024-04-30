@@ -269,7 +269,7 @@ alias KvStore.GetResponse
     send(request.request.sender, KvStore.PutResponse.new(context, request.request.req_id))
 
     # send log to observer
-    send(state.observer, KvStore.PutRequestLog.new(request.request.req_id, request.request.key, request.request.object, whoami()))
+    send(state.observer, KvStore.PutRequestLog.new(request.request.req_id, request.request.key, request.request.object, :os.system_time(:millisecond), whoami()))
 
     %{state |
       request_responses: Map.delete(state.request_responses, index),

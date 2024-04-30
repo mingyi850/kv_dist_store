@@ -8,7 +8,8 @@ defmodule KvStore.LogEntry do
     latency: 0,
     key: nil,
     value: nil,
-    timestamp: 0
+    timestamp: 0,
+    start_ts: 0
   )
 
   @spec new(%{}) :: %KvStore.LogEntry{}
@@ -21,7 +22,8 @@ defmodule KvStore.LogEntry do
       latency: Map.get(log, :client_latency, 0),
       key: Map.get(log, :key, nil),
       value: Map.get(log, :value, nil),
-      timestamp: :os.system_time(:millisecond)
+      timestamp: :os.system_time(:millisecond),
+      start_ts: Map.get(log, :start_ts, -1)
     }
   end
 
@@ -42,16 +44,15 @@ defmodule KvStore.Observer do
 
   '''
   `data`
-    map key to value
+    map a key to a list that contain all put history. Each entries contain %{ts, value}. 
+    The entries with larger ts is in the front of the list. The end of the list should contain entry %{ts: 0, value: nil}.
   `log`
     map request id to %KvStore.LogEntry{}
   '''
 
   defstruct(
     data: %{},
-    log: %{},
-    get_count: 0,
-    stale_count: 0
+    log: %{}
   )
 
   @spec init(atom()) :: %KvStore.Observer{}
@@ -59,9 +60,7 @@ defmodule KvStore.Observer do
     Logger.info("Initializing Observer with node: #{inspect(node)}")
     %KvStore.Observer{
       data: %{},
-      log: %{},
-      get_count: 0,
-      stale_count: 0
+      log: %{}
     }
   end
 
@@ -74,6 +73,10 @@ defmodule KvStore.Observer do
         state = log_get(state, request)
         # Logger.info("Observer data: #{inspect(state.data)}, log: #{inspect(state.log)}")
         run(state)
+      {_, {:get_start_time, req_id, start_ts}} -> 
+        Logger.info("Observer receive start_timestamp of [#{req_id}] = #{start_ts}")
+        state = log_get_start_time(state, req_id, start_ts)
+        run(state)
       {_, %KvStore.PutRequestLog{} = request} ->
         Logger.info("Observer receive (put) #{inspect(request)}")
         state = log_put(state, request)
@@ -83,10 +86,6 @@ defmodule KvStore.Observer do
         Logger.info("Observer receive (client) #{inspect(request)}")
         state = log_client(state, request)
         # Logger.info("Observer data: #{inspect(state.data)}, log: #{inspect(state.log)}")
-        run(state)
-      {sender, :get_stale_stat} ->
-        Logger.info("Observer report stale stat to #{inspect(sender)}")
-        send(sender, %{get_count: state.get_count, stale_count: state.stale_count})
         run(state)
       {sender, :get_log} ->
         Logger.info("Observer send log to #{inspect(sender)}")
@@ -98,61 +97,69 @@ defmodule KvStore.Observer do
     end
   end
 
-  @spec log_get(%KvStore.Observer{}, %KvStore.GetRequestLog{}) :: %KvStore.Observer{}
-  def log_get(state, request) do
-    if Map.has_key?(state.log, request.req_id) do
-      Logger.debug("in log_get #{inspect(request.object)}")
-      # cache_entry = Enum.at(request.object, 0)
-      # is_stale = check_staleness(Map.get(state.data, request.key, nil), cache_entry)
-      is_stale = check_staleness(Map.get(state.data, request.key, nil), request.object)
-      if is_stale do
-        Logger.warning("Stale data 1: #{inspect(Map.get(state.data, request.key, nil))}, cache: #{inspect(request.object)}")
-      end
-      log_entry = %KvStore.LogEntry{state.log[request.req_id] |
-        type: :get,
-        is_stale: is_stale,
-        kvnode: request.sender,
-        key: request.key
-        # value: request.object
+  @spec log_get_start_time(%KvStore.Observer{}, non_neg_integer(), non_neg_integer()) :: %KvStore.Observer{}
+  def log_get_start_time(state, req_id, start_ts) do 
+    if Map.has_key?(state.log, req_id) do
+      IO.puts("in log_get_start_time [#{req_id}], #{inspect(Map.get(state.data, state.log[req_id].key, [%{ts: 0, value: nil} | []]))}, log_entry = #{inspect(state.log[req_id].value)}")
+      log_entry = %KvStore.LogEntry{state.log[req_id] | 
+        start_ts: start_ts,
+        is_stale: if state.log[req_id].value != nil do 
+          check_staleness(Map.get(state.data, state.log[req_id].key, [%{ts: 0, value: nil} | []]), start_ts, state.log[req_id].value)
+          else false end
       }
-      %{state |
-        log: Map.put(state.log, request.req_id, log_entry),
-        get_count: state.get_count + 1,
-        stale_count: if is_stale do state.stale_count + 1 else state.stale_count end
-        }
-    else
-      # cache_entry = Enum.at(request.object, 0)
-      # is_stale = check_staleness(Map.get(state.data, request.key, nil), cache_entry)
-      is_stale = check_staleness(Map.get(state.data, request.key, nil), request.object)
-      if is_stale do
-        Logger.warning("Stale data 2: #{inspect(Map.get(state.data, request.key, nil))}, cache: #{inspect(request.object)}")
-      end
+      %{state | log: Map.put(state.log, req_id, log_entry)}
+    else 
       log_entry = KvStore.LogEntry.new(%{
         type: :get,
-        is_stale: is_stale,
-        kvnode: request.sender,
-        key: request.key
-        # value: request.object
+        start_ts: start_ts
       })
-      %{state |
-        log: Map.put(state.log, request.req_id, log_entry),
-        get_count: state.get_count + 1,
-        stale_count: if is_stale do state.stale_count + 1 else state.stale_count end
-        }
+      %{state | log: Map.put(state.log, req_id, log_entry)}
     end
   end
 
-  defp check_staleness(data, objects) do
-    if data == nil do 
-      false
+  @spec log_get(%KvStore.Observer{}, %KvStore.GetRequestLog{}) :: %KvStore.Observer{}
+  def log_get(state, request) do
+    if Map.has_key?(state.log, request.req_id) do
+      IO.puts("in log_get [#{request.req_id}], #{inspect(Map.get(state.data, request.key, [%{ts: 0, value: nil} | []]))}, log_entry = #{inspect(state.log[request.req_id])}")
+      log_entry = %KvStore.LogEntry{state.log[request.req_id] |
+        type: :get,
+        is_stale: if state.log[request.req_id].start_ts != -1 do 
+          check_staleness(Map.get(state.data, request.key, [%{ts: 0, value: nil} | []]), state.log[request.req_id].start_ts, request.object) 
+          else false end,
+        kvnode: request.sender,
+        key: request.key,
+        value: request.object
+      }
+      %{state | log: Map.put(state.log, request.req_id, log_entry)}
+    else
+      log_entry = KvStore.LogEntry.new(%{
+        type: :get,
+        kvnode: request.sender,
+        key: request.key,
+        value: request.object
+      })
+      %{state | log: Map.put(state.log, request.req_id, log_entry)}
+    end
+  end
+
+  defp check_staleness(data, ts, objects) do
+    [head | tail] = data
+    IO.puts("check_staleness, data length = #{length(data)}, #{head.ts} <=> #{ts}")
+    if head.ts < ts do 
+      if head.value == nil do 
+        false
+      else 
+        !Enum.member?(Enum.map(objects, fn cache_entry -> cache_entry.object end), head.value)
+      end
     else 
-      !Enum.member?(Enum.map(objects, fn cache_entry -> cache_entry.object end), data)
+      check_staleness(tail, ts, objects)
     end
   end
 
   @spec log_put(%KvStore.Observer{}, %KvStore.PutRequestLog{}) :: %KvStore.Observer{}
   def log_put(state, request) do
-    state = %{state | data: Map.put(state.data, request.key, request.object)}
+    # state = %{state | data: Map.put(state.data, request.key, request.object)}
+    state = %{state | data: Map.put(state.data, request.key, [%{ts: request.end_ts, value: request.object} | Map.get(state.data, request.key, [%{ts: 0, value: nil} | []])])}
     if Map.has_key?(state.log, request.req_id) do
       log_entry = %KvStore.LogEntry{state.log[request.req_id] |
         type: :put,
@@ -181,6 +188,7 @@ defmodule KvStore.Observer do
       }
       %{state | log: Map.put(state.log, request.req_id, log_entry)}
     else
+      IO.puts("[#{request.req_id}] log_client comes before log_get/put")
       log_entry = KvStore.LogEntry.new(%{
         client: request.sender,
         latency: request.recv_ts - request.send_ts

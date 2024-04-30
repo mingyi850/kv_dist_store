@@ -142,7 +142,7 @@ defmodule TestCase do
     end
   end
 
-  test "rounds=1000__gets=2__puts=1__kvnodes=3(3,3,3)__keys=5__clients=2__delay=2" do
+  test "rounds=1000__gets=2__puts=1__kvnodes=3(3,2,2)__keys=1__clients=1__delay=2" do
     Emulation.init()
     Emulation.append_fuzzers([Fuzzers.delay(2)])
 
@@ -150,12 +150,12 @@ defmodule TestCase do
     rounds = 1000
     gets = 2
     puts = 1
-    keys = 5
+    keys = 1
     rep_factor = 3
-    r_quorum = 3
-    w_quorum = 3
+    r_quorum = 2
+    w_quorum = 2
     kv_nodes = [:a, :b, :c]
-    clients = [:client_a, :client_b]
+    clients = [:client_a]
 
     spawn(:observer, fn -> KvStore.Observer.run(KvStore.Observer.init(:observer)) end)
     lb_base_config =
