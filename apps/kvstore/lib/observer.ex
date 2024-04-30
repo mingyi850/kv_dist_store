@@ -124,7 +124,7 @@ defmodule KvStore.Observer do
       log_entry = %KvStore.LogEntry{state.log[request.req_id] |
         type: :get,
         is_stale: if state.log[request.req_id].start_ts != -1 do
-          check_staleness(Map.get(state.data, request.key, [%{end_ts: 0, value: nil} | []]), state.log[request.req_id].start_ts, request.object)
+          check_staleness(Map.get(state.data, request.key, [%{end_ts: 0, start_ts: 0, value: nil} | []]), state.log[request.req_id].start_ts, request.object)
           else false end,
         kvnode: request.sender,
         key: request.key,
@@ -142,30 +142,90 @@ defmodule KvStore.Observer do
     end
   end
 
-  defp check_staleness(data, ts, objects) do
-    [head | tail] = data
-    IO.puts("check_staleness, data length = #{length(data)}, #{head.end_ts} <=> #{ts}")
-    if head.end_ts < ts do
-      if head.value == nil do
-        false
-      else
-        !Enum.member?(Enum.map(objects, fn cache_entry -> cache_entry.object end), head.value)
-      end
+  defp find_first_before(data, timestamp, accum) do
+    if data == [] do
+      accum
     else
-      check_staleness(tail, ts, objects)
+      [head | tail] = data
+      if head.end_ts > 0 and head.end_ts <= timestamp do
+        diff = timestamp - head.end_ts
+        if (accum == nil || diff < (timestamp - accum.end_ts)) do
+          find_first_before(tail, timestamp, head)
+        else
+          find_first_before(tail, timestamp, accum)
+        end
+      else
+        find_first_before(tail, timestamp, accum)
+      end
     end
+  end
+
+  defp find_open_requests(data, timestamp, accum, closed) do
+    if data == [] do
+      accum
+    else
+      [head | tail] = data
+      if head.start_ts > 0 and !MapSet.member?(closed, head.req_id) do #Open
+        find_open_requests(tail, timestamp, [head | accum], closed)
+      else
+        if head.end_ts > 0 and head.end_ts < timestamp do
+          find_open_requests(tail, timestamp, accum, MapSet.put(closed, head.req_id))
+        else
+          find_open_requests(tail, timestamp, accum, closed)
+        end
+      end
+    end
+  end
+
+  defp check_staleness(data, ts, objects) do
+    #Fix - data not guaranteed to be in timestamp order. Need to find all. Use min by maybe
+    IO.puts("Finding first before for #{ts} in #{inspect(data)}")
+    first_put_end = find_first_before(data, ts, nil)
+    IO.puts("Got first put end #{inspect(first_put_end)}")
+    if first_put_end == nil do
+      false
+    else
+      #other_viable = Enum.filter(data, fn entry -> entry.end_ts == 0 && entry.start_ts > first_put_end.end_ts && entry.start_ts < ts end)
+      other_viable = find_open_requests(data, ts, [], MapSet.new())
+      IO.puts("Viable responses #{inspect([first_put_end | other_viable])}")
+      !(Enum.member?(Enum.map(objects, fn cache_entry -> cache_entry.object end), first_put_end.value) || Enum.any?(other_viable, fn viable -> Enum.member?(Enum.map(objects, fn cache_entry -> cache_entry.object end), viable.value) end))
+    end
+    #[head | tail] = data
+    #IO.puts("check_staleness, data length = #{length(data)}, #{head.end_ts} <=> #{ts}")
+    #if head.end_ts < ts do
+    #  if head.value == nil do
+    #    false
+    #  else
+    #    !Enum.member?(Enum.map(objects, fn cache_entry -> cache_entry.object end), head.value)
+    #  end
+    #else
+    #  if head.start_ts < ts do
+    #    if head.value == nil do
+    #      false
+    #    else
+    #      if Enum.member?(Enum.map(objects, fn cache_entry -> cache_entry.object end), head.value) do
+    #        false
+    #      else
+    #        check_staleness(tail, ts, objects)
+    #      end
+    #    end
+    #  else
+    #    check_staleness(tail, ts, objects)
+    #  end
+    #end
   end
 
   @spec log_put(%KvStore.Observer{}, %KvStore.PutRequestLog{}) :: %KvStore.Observer{}
   def log_put(state, request) do
     # state = %{state | data: Map.put(state.data, request.key, request.object)}
-    state = %{state | data: Map.put(state.data, request.key, [%{end_ts: request.end_ts, value: request.object} | Map.get(state.data, request.key, [%{end_ts: 0, value: nil} | []])])}
+    state = %{state | data: Map.put(state.data, request.key, [%{req_id: request.req_id, start_ts: request.start_ts, end_ts: request.end_ts, value: request.object} | Map.get(state.data, request.key, [%{req_id: -1, end_ts: 0, start_ts: 0, value: nil} | []])])}
     if Map.has_key?(state.log, request.req_id) do
       log_entry = %KvStore.LogEntry{state.log[request.req_id] |
         type: :put,
         kvnode: request.sender,
         key: request.key,
-        value: request.object
+        value: request.object,
+        start_ts: request.start_ts
       }
       %{state | log: Map.put(state.log, request.req_id, log_entry)}
     else
@@ -173,7 +233,8 @@ defmodule KvStore.Observer do
         type: :put,
         kvnode: request.sender,
         key: request.key,
-        value: request.object
+        value: request.object,
+        start_ts: request.start_ts
       })
       %{state | log: Map.put(state.log, request.req_id, log_entry)}
     end

@@ -56,7 +56,9 @@ defmodule KvStore.LoadBalancer do
         preference_list = get_preference_list(key, state, state.replication_factor)
         node = Enum.random(preference_list)
         #TODO: Redirect messages to any node in the preference list instead of the first node.
-        send(node, KvStore.PutRequest.new(key, object, context, sender, original_node, state.req_id))
+        request = KvStore.PutRequest.new(key, object, context, sender, original_node, state.req_id)
+        send(node, request)
+        send(state.observer, KvStore.PutRequestLog.new(request.req_id, request.key, request.object, :os.system_time(:millisecond), 0, whoami()))
         run(%{state | req_id: state.req_id + 1})
       {_, {:node_down, node}} ->
         state = %{state | live_nodes: MapSet.delete(state.live_nodes, node)}
