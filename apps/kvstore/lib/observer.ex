@@ -163,23 +163,24 @@ defmodule KvStore.Observer do
     end
   end
 
-  defp find_open_requests(data, timestamp, accum, closed) do
+  defp find_open_requests(data, timestamp, first_start, accum, closed) do
     if data == [] do
       accum
     else
       [head | tail] = data
       if head.start_ts > 0 and !MapSet.member?(closed, head.req_id) do #Open
-        find_open_requests(tail, timestamp, [head | accum], closed)
+        find_open_requests(tail, timestamp, first_start, [head | accum], closed)
       else
-        if head.end_ts > 0 and head.end_ts < timestamp do
+        if head.end_ts > 0 and head.end_ts < timestamp and head.end_ts < first_start.start_ts do
           accum = Enum.filter(accum, fn entry -> entry.req_id != head.req_id end)
-          find_open_requests(tail, timestamp, accum, MapSet.put(closed, head.req_id))
+          find_open_requests(tail, timestamp, first_start, accum, MapSet.put(closed, head.req_id))
         else
-          find_open_requests(tail, timestamp, accum, closed)
+          find_open_requests(tail, timestamp, first_start, accum, closed)
         end
       end
     end
   end
+
 
   defp check_staleness(data, ts, objects) do
     IO.puts("Finding first before for #{ts} in #{inspect(data)}")
@@ -188,8 +189,9 @@ defmodule KvStore.Observer do
     if first_put_end == nil do
       false
     else
+      first_start = Enum.find(data, fn entry -> entry.req_id == first_put_end.req_id and entry.start_ts > 0  end)
       #other_viable = Enum.filter(data, fn entry -> entry.end_ts == 0 && entry.start_ts > first_put_end.end_ts && entry.start_ts < ts end)
-      other_viable = find_open_requests(data, ts, [], MapSet.new())
+      other_viable = find_open_requests(data, ts, first_start, [], MapSet.new())
       IO.puts("Viable responses #{inspect([first_put_end | other_viable])}")
       !(Enum.member?(Enum.map(objects, fn cache_entry -> cache_entry.object end), first_put_end.value) || Enum.any?(other_viable, fn viable -> Enum.member?(Enum.map(objects, fn cache_entry -> cache_entry.object end), viable.value) end))
     end
