@@ -86,18 +86,19 @@ defmodule TestCase do
       {sender, %KvStore.GetResponse{objects: objects, type: type, req_id: req_id}} ->
         Logger.info("Receive response of #{req_id} from #{sender} with #{inspect(objects)}")
         recv_ts = :os.system_time(:millisecond)
-        send(:observer, KvStore.ClientRequestLog.new(req_id, :client_c, send_ts, recv_ts))
+        send(:observer, KvStore.ClientRequestLog.new(req_id, whoami(), send_ts, recv_ts))
         context_map = Map.put(context_map, key, Enum.map(objects, fn obj -> obj.context end))
         Logger.debug("context_map: #{inspect(context_map)}")
         if length(tail) > 0 do generate_request(load_balancer, observer, tail, context_map) else context_map end
       {sender, %KvStore.PutResponse{context: context, type: type, req_id: req_id}} ->
         Logger.info("Receive response of #{req_id} from #{sender} with context: #{inspect(context)}")
         recv_ts = :os.system_time(:millisecond)
-        send(:observer, KvStore.ClientRequestLog.new(req_id, :client_b, send_ts, recv_ts))
+        send(:observer, KvStore.ClientRequestLog.new(req_id, whoami(), send_ts, recv_ts))
         context_map = Map.put(context_map, key, [context | []])
         if length(tail) > 0 do generate_request(load_balancer, observer, tail, context_map) else context_map end
       unknown ->
         Logger.info("client receive unknown msg: #{inspect(unknown)}")
+        context_map
     end
   end
 
@@ -143,20 +144,22 @@ defmodule TestCase do
     end
   end
 
-  test "rounds=1000__gets=2__puts=1__kvnodes=3(3,2,2)__keys=1__clients=1__delay=2" do
+  test "rounds=1000__gets=1__puts=1__kvnodes=(3,2,2)__keys=5__clients=3__delay=5" do
     Emulation.init()
-    Emulation.append_fuzzers([Fuzzers.delay(2)])
+    Emulation.append_fuzzers([Fuzzers.delay(5)])
     Emulation.mark_unfuzzable()
+
     # parameters
     rounds = 1000
-    gets = 2
+    gets = 1
     puts = 1
-    keys = 1
+    keys = 5
     rep_factor = 3
     r_quorum = 2
     w_quorum = 2
-    kv_nodes = [:a, :b, :c, :d, :e]
-    clients = [:client_a, :client_b]
+    kv_nodes = [:a, :b, :c]#, :d, :e, :f, :g, :h, :i]
+    assert rep_factor <= length(kv_nodes)
+    clients = [:client_a, :client_b, :client_c]
 
     spawn(:observer, fn -> KvStore.Observer.run(KvStore.Observer.init(:observer)) end)
     lb_base_config =
