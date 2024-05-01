@@ -1,4 +1,4 @@
-defmodule TestCase do
+defmodule TestCaseVar do
   use ExUnit.Case
   import Emulation, only: [spawn: 2, send: 2, whoami: 0]
 
@@ -16,32 +16,30 @@ defmodule TestCase do
   '''
   Get latency stats
   '''
-  @spec latency_stat(%KvStore.LogEntry{}) :: nil
+  @spec latency_stat(%KvStore.LogEntry{}) :: {float(), float()}
   def latency_stat(logs) do
     # Logger.info("LATENCY STAT")
-    IO.puts("%% LATENCY STAT")
+    #IO.puts("%% LATENCY STAT")
     # Logger.debug("logs: #{inspect(logs)}")
     latencies = Enum.map(logs, fn {req_id, log_entry} -> %{type: log_entry.type, latency: log_entry.latency} end)
     # Logger.info("latencies: #{inspect(latencies)}")
     #IO.puts("%% latencies: #{inspect(latencies)}")
 
     latencies_get = Enum.filter(latencies, fn %{type: t, latency: l} -> t == :get end) |> Enum.map(fn %{type: t, latency: l} -> l end)
-    # Logger.info("latencies of get: #{inspect(latencies_get)}, mean: #{Enum.sum(latencies_get)/Enum.count(latencies_get)}")
-    #IO.puts("%% latencies of get: #{inspect(latencies_get)}, mean: #{Enum.sum(latencies_get)/Enum.count(latencies_get)}")
-    IO.puts("%% Average Latency of get: #{Enum.sum(latencies_get)/Enum.count(latencies_get)}")
+    get_avg_latency = Enum.sum(latencies_get)/Enum.count(latencies_get)
     latencies_put = Enum.filter(latencies, fn %{type: t, latency: l} -> t == :put end) |> Enum.map(fn %{type: t, latency: l} -> l end)
-    # Logger.info("latencies of put: #{inspect(latencies_put)}, mean: #{Enum.sum(latencies_put)/Enum.count(latencies_put)}")
-    #IO.puts("%% latencies of put: #{inspect(latencies_put)}, mean: #{Enum.sum(latencies_put)/Enum.count(latencies_put)}")
-    IO.puts("%% Average Latency of put: #{Enum.sum(latencies_put)/Enum.count(latencies_put)}")
+    put_avg_latency = Enum.sum(latencies_put)/Enum.count(latencies_put)
+    #IO.puts("%% Average Latency of put: #{Enum.sum(latencies_put)/Enum.count(latencies_put)}")
+    {get_avg_latency, put_avg_latency}
   end
 
   '''
   Get staleness stats
   '''
-  @spec staleness_stat(%KvStore.LogEntry{}) :: nil
+  @spec staleness_stat(%KvStore.LogEntry{}) :: {non_neg_integer(), float()}
   def staleness_stat(logs) do
     # Logger.info("STALENESS STAT")
-    IO.puts("%% STALENESS STAT")
+    #IO.puts("%% STALENESS STAT")
     logs_get = Enum.filter(logs, fn {req_id, log_entry} -> log_entry.type == :get end)
     stale_gets = Enum.filter(logs_get, fn {req_id, log_entry} -> log_entry.is_stale end)
     if length(stale_gets) > 0 do
@@ -59,7 +57,8 @@ defmodule TestCase do
     logs_stale = Enum.filter(logs, fn {req_id, log_entry} -> log_entry.is_stale end)
     stale_count = Enum.count(logs_stale)
     # Logger.info("stale rate: #{stale_count}/#{get_count} = #{stale_count/get_count}")
-    IO.puts("%% stale rate: #{stale_count}/#{get_count} = #{stale_count/get_count}")
+    #IO.puts("%% stale rate: #{stale_count}/#{get_count} = #{stale_count/get_count}")
+    {stale_count, stale_count/get_count}
   end
 
   @spec generate_random_get(pos_integer()) :: {}
@@ -116,7 +115,7 @@ defmodule TestCase do
   def handle_monitor(count) do
     receive do
       {:DOWN, _, _, _, _} ->
-        IO.puts("client complete")
+        #IO.puts("client complete")
         if count - 1 > 0 do
           handle_monitor(count - 1)
         else
@@ -124,8 +123,14 @@ defmodule TestCase do
             send(:observer, :get_log)
             receive do
               {_, logs} ->
-                TestCase.latency_stat(logs)
-                TestCase.staleness_stat(logs)
+                {get_latency, put_latency} = TestCaseVar.latency_stat(logs)
+                {stale_count, stale_rate} = TestCaseVar.staleness_stat(logs)
+                #Print all stats from test separated by commas
+                #rounds	gets	puts	keys	kv_node	quorum	clients	delay	latency (get)	latency (put)	stale cases	stale rate
+                resultcsv = "#{System.argv |> Enum.drop(2) |> Enum.join(",")},#{get_latency},#{put_latency},#{stale_count},#{stale_rate}"
+                IO.puts(resultcsv)
+                File.open("test_results.csv", [:append]) |> elem(1) |> IO.write(resultcsv <> "\n")
+                File.close("test_results.csv")
               unknown ->
                 # Logger.debug("client_log receive unknown msg #{inspect(unknown)}")
             end
@@ -138,29 +143,39 @@ defmodule TestCase do
           end
         end
       unknown ->
-        IO.puts("monitor handler unknown message: #{inspect(unknown)}")
+        #IO.puts("monitor handler unknown message: #{inspect(unknown)}")
     # after
     #   100_000 -> assert false
     end
   end
 
+  def get_nodes(count) do
+    all_nodes = [:a, :b, :c, :d, :e, :f, :g, :h, :i, :j, :k, :l, :m, :n, :o, :p, :q, :r, :s, :t, :u, :v, :w, :x, :y, :z]
+    Enum.take(all_nodes, count)
+  end
+
+  def get_clients(count) do
+    all_clients = [:client_a, :client_b, :client_c, :client_d, :client_e, :client_f, :client_g, :client_h, :client_i, :client_j, :client_k, :client_l, :client_m, :client_n, :client_o, :client_p, :client_q, :client_r, :client_s, :client_t, :client_u, :client_v, :client_w, :client_x, :client_y, :client_z]
+    Enum.take(all_clients, count)
+  end
   @tag capture_log: true
   test "rounds=1000__gets=2__puts=1__kvnodes=(9,5,5)__keys=5__clients=3__delay=0" do
     Emulation.init()
-    Emulation.append_fuzzers([Fuzzers.delay(0)])
-    Emulation.mark_unfuzzable()
 
     # parameters
-    rounds = 1000
-    gets = 2
-    puts = 1
-    keys = 5
-    rep_factor = 9
-    r_quorum = 5
-    w_quorum = 5
-    kv_nodes = [:a, :b, :c, :d, :e, :f, :g, :h, :i]
+    [rounds, gets, puts, keys, rep_factor, r_quorum, w_quorum, nodes, clients, delay] = System.argv |> Enum.drop(2) |> Enum.map(&String.to_integer/1)
+    Emulation.append_fuzzers([Fuzzers.delay(delay)])
+    Emulation.mark_unfuzzable()
+    #rounds = 1000
+    #gets = 2
+    #puts = 1
+    #keys = 5
+    #rep_factor = 9
+    #r_quorum = 5
+    #w_quorum = 5
+    kv_nodes = get_nodes(nodes)
     assert rep_factor <= length(kv_nodes)
-    clients = [:client_a, :client_b, :client_c]
+    clients = get_clients(clients)
 
     spawn(:observer, fn -> KvStore.Observer.run(KvStore.Observer.init(:observer)) end)
     lb_base_config =
@@ -179,12 +194,12 @@ defmodule TestCase do
     Enum.each(clients, fn client ->
       Process.monitor(
         spawn(client, fn ->
-          TestCase.generate_requests(rounds, :lb, :observer, gets, puts, keys, 1000, %{})
+          TestCaseVar.generate_requests(rounds, :lb, :observer, gets, puts, keys, 1000, %{})
         end)
       )
     end)
 
-    TestCase.handle_monitor(length(clients))
+    TestCaseVar.handle_monitor(length(clients))
 
   after
     Emulation.terminate()

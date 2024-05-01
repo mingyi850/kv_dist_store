@@ -103,7 +103,7 @@ defmodule KvStore.Observer do
   @spec log_get_start_time(%KvStore.Observer{}, non_neg_integer(), non_neg_integer()) :: %KvStore.Observer{}
   def log_get_start_time(state, req_id, start_ts) do
     if Map.has_key?(state.log, req_id) do
-      IO.puts("in log_get_start_time [#{req_id}], #{inspect(Map.get(state.data, state.log[req_id].key, [%{end_ts: 0, value: nil} | []]))}, log_entry = #{inspect(state.log[req_id].value)}")
+      Logger.debug("in log_get_start_time [#{req_id}], #{inspect(Map.get(state.data, state.log[req_id].key, [%{end_ts: 0, value: nil} | []]))}, log_entry = #{inspect(state.log[req_id].value)}")
       log_entry = %KvStore.LogEntry{state.log[req_id] |
         start_ts: start_ts,
         is_stale: if state.log[req_id].value != nil do
@@ -123,7 +123,7 @@ defmodule KvStore.Observer do
   @spec log_get(%KvStore.Observer{}, %KvStore.GetRequestLog{}) :: %KvStore.Observer{}
   def log_get(state, request) do
     if Map.has_key?(state.log, request.req_id) do
-      IO.puts("in log_get [#{request.req_id}], #{inspect(Map.get(state.data, request.key, [%{end_ts: 0, value: nil} | []]))}, log_entry = #{inspect(state.log[request.req_id])}")
+      Logger.debug("in log_get [#{request.req_id}], #{inspect(Map.get(state.data, request.key, [%{end_ts: 0, value: nil} | []]))}, log_entry = #{inspect(state.log[request.req_id])}")
       log_entry = %KvStore.LogEntry{state.log[request.req_id] |
         type: :get,
         is_stale: if state.log[request.req_id].start_ts != -1 do
@@ -183,16 +183,16 @@ defmodule KvStore.Observer do
 
 
   defp check_staleness(data, ts, objects) do
-    IO.puts("Finding first before for #{ts} in #{inspect(data)}")
+    Logger.debug("Finding first before for #{ts} in #{inspect(data)}")
     first_put_end = find_first_before(data, ts, nil)
-    IO.puts("Got first put end #{inspect(first_put_end)}")
+    Logger.debug("Got first put end #{inspect(first_put_end)}")
     if first_put_end == nil do
       false
     else
       first_start = Enum.find(data, fn entry -> entry.req_id == first_put_end.req_id and entry.start_ts > 0  end)
       #other_viable = Enum.filter(data, fn entry -> entry.end_ts == 0 && entry.start_ts > first_put_end.end_ts && entry.start_ts < ts end)
       other_viable = find_open_requests(data, ts, first_start, [], MapSet.new())
-      IO.puts("Viable responses #{inspect([first_put_end | other_viable])}")
+      Logger.debug("Viable responses #{inspect([first_put_end | other_viable])}")
       !(Enum.member?(Enum.map(objects, fn cache_entry -> cache_entry.object end), first_put_end.value) || Enum.any?(other_viable, fn viable -> Enum.member?(Enum.map(objects, fn cache_entry -> cache_entry.object end), viable.value) end))
     end
     #[head | tail] = data
@@ -256,7 +256,7 @@ defmodule KvStore.Observer do
       }
       %{state | log: Map.put(state.log, request.req_id, log_entry)}
     else
-      IO.puts("[#{request.req_id}] log_client comes before log_get/put")
+      Logger.debug("[#{request.req_id}] log_client comes before log_get/put")
       log_entry = KvStore.LogEntry.new(%{
         client: request.sender,
         latency: request.recv_ts - request.send_ts
