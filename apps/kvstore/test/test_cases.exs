@@ -146,16 +146,16 @@ defmodule TestCase do
   test "rounds=1000__gets=2__puts=1__kvnodes=3(3,2,2)__keys=1__clients=1__delay=2" do
     Emulation.init()
     Emulation.append_fuzzers([Fuzzers.delay(2)])
-
+    Emulation.mark_unfuzzable()
     # parameters
     rounds = 1000
     gets = 2
     puts = 1
     keys = 1
     rep_factor = 3
-    r_quorum = 1
-    w_quorum = 1
-    kv_nodes = [:a, :b, :c]
+    r_quorum = 2
+    w_quorum = 2
+    kv_nodes = [:a, :b, :c, :d, :e]
     clients = [:client_a, :client_b]
 
     spawn(:observer, fn -> KvStore.Observer.run(KvStore.Observer.init(:observer)) end)

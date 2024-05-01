@@ -66,6 +66,7 @@ defmodule KvStore.Observer do
 
   @spec run(%KvStore.Observer{}) :: %KvStore.Observer{}
   def run(state) do
+    Emulation.mark_unfuzzable()
     # Logger.info("Observer run with state #{inspect(state)}")
     receive do
       {_, %KvStore.GetRequestLog{} = request} ->
@@ -169,6 +170,7 @@ defmodule KvStore.Observer do
         find_open_requests(tail, timestamp, [head | accum], closed)
       else
         if head.end_ts > 0 and head.end_ts < timestamp do
+          accum = Enum.filter(accum, fn entry -> entry.req_id != head.req_id end)
           find_open_requests(tail, timestamp, accum, MapSet.put(closed, head.req_id))
         else
           find_open_requests(tail, timestamp, accum, closed)
