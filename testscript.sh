@@ -24,7 +24,7 @@ for nodes in $NODES; do
                 for delay in $DELAY; do
                 # Run the test with the given parameters [rounds, gets, puts, keys, rep_factor, r_quorum, w_quorum, nodes, clients, delay]
                 echo "Running test with rounds: $ROUNDS, gets: $GETS, puts: $PUTS, keys: $KEYS, rep_factor: $rep_factor, r_quorum: $quorum, w_quorum: $quorum, nodes: $nodes, clients: $clients, delay: $delay"
-                mix test test/test_cases.exs $ROUNDS $GETS $PUTS $KEYS $rep_factor $quorum $quorum $nodes $clients $delay
+                mix test test/test_cases_var.exs $ROUNDS $GETS $PUTS $KEYS $rep_factor $quorum $quorum $nodes $clients $delay
                 done
             done
         done
