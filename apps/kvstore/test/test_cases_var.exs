@@ -98,6 +98,10 @@ defmodule TestCaseVar do
       unknown ->
         Logger.info("client receive unknown msg: #{inspect(unknown)}")
         context_map
+    after 
+      1_000 -> 
+        Logger.info("client timeout")
+        context_map
     end
   end
 
@@ -127,7 +131,7 @@ defmodule TestCaseVar do
                 {stale_count, stale_rate} = TestCaseVar.staleness_stat(logs)
                 #Print all stats from test separated by commas
                 #rounds	gets	puts	keys	kv_node	quorum	clients	delay	latency (get)	latency (put)	stale cases	stale rate
-                resultcsv = "#{System.argv |> Enum.drop(2) |> Enum.join(",")},#{get_latency},#{put_latency},#{stale_count},#{stale_rate}"
+                resultcsv = "#{System.argv |> Enum.drop(3) |> Enum.join(",")},#{get_latency},#{put_latency},#{stale_count},#{stale_rate}"
                 IO.puts(resultcsv)
                 File.open("test_results.csv", [:append]) |> elem(1) |> IO.write(resultcsv <> "\n")
                 File.close("test_results.csv")
@@ -163,7 +167,7 @@ defmodule TestCaseVar do
     Emulation.init()
 
     # parameters
-    [rounds, gets, puts, keys, rep_factor, r_quorum, w_quorum, nodes, clients, delay] = System.argv |> Enum.drop(2) |> Enum.map(&String.to_integer/1)
+    [rounds, gets, puts, keys, rep_factor, r_quorum, w_quorum, nodes, clients, delay] = System.argv |> Enum.drop(3) |> Enum.map(&String.to_integer/1)
     Emulation.append_fuzzers([Fuzzers.delay(delay)])
     Emulation.mark_unfuzzable()
     #rounds = 1000
