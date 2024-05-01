@@ -286,6 +286,7 @@ defmodule KvStore.GetRequestLog do
     key: "",
     object: nil,
     sender: nil,
+    timestamp: 0,
     # recv_ts: 0,
     # resp_ts: 0,
     type: :get_log
@@ -300,6 +301,7 @@ defmodule KvStore.GetRequestLog do
       key: key,
       object: object,
       sender: sender,
+      timestamp: :os.system_time(:millisecond),
       # recv_ts: recv_ts,
       # resp_ts: resp_ts,
       type: :get_log
@@ -317,6 +319,7 @@ defmodule KvStore.PutRequestLog do
     req_id: 0,
     key: "",
     object: nil,
+    context: nil,
     sender: nil,
     # recv_ts: 0,
     # resp_ts: 0,
@@ -327,12 +330,13 @@ defmodule KvStore.PutRequestLog do
 
   # @spec new(non_neg_integer(), String.t(), any(), pid(), non_neg_integer(), non_neg_integer()) :: %KvStore.PutRequestLog{}
   # def new(req_id, key, object, sender, recv_ts, resp_ts) do
-  @spec new(non_neg_integer(), String.t(), any(), non_neg_integer(), non_neg_integer(), pid()) :: %KvStore.PutRequestLog{}
-  def new(req_id, key, object, start_ts, end_ts, sender) do
+  @spec new(non_neg_integer(), String.t(), any(), %KvStore.Context{}, non_neg_integer(), non_neg_integer(), pid()) :: %KvStore.PutRequestLog{}
+  def new(req_id, key, object, context, start_ts, end_ts, sender) do
     %KvStore.PutRequestLog{
       req_id: req_id,
       key: key,
       object: object,
+      context: context,
       sender: sender,
       # recv_ts: recv_ts,
       # resp_ts: resp_ts,

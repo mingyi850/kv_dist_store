@@ -8,6 +8,7 @@ defmodule KvStore.LogEntry do
     latency: 0,
     key: nil,
     value: nil,
+    context: nil,
     timestamp: 0,
     start_ts: 0
   )
@@ -22,6 +23,7 @@ defmodule KvStore.LogEntry do
       latency: Map.get(log, :client_latency, 0),
       key: Map.get(log, :key, nil),
       value: Map.get(log, :value, nil),
+      context: Map.get(log, :context, nil),
       timestamp: :os.system_time(:millisecond),
       start_ts: Map.get(log, :start_ts, -1)
     }
@@ -226,6 +228,7 @@ defmodule KvStore.Observer do
         kvnode: request.sender,
         key: request.key,
         value: request.object,
+        context: request.context,
         start_ts: request.start_ts
       }
       %{state | log: Map.put(state.log, request.req_id, log_entry)}
@@ -235,6 +238,7 @@ defmodule KvStore.Observer do
         kvnode: request.sender,
         key: request.key,
         value: request.object,
+        context: request.context,
         start_ts: request.start_ts
       })
       %{state | log: Map.put(state.log, request.req_id, log_entry)}

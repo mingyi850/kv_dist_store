@@ -48,7 +48,7 @@ defmodule TestCase do
       IO.puts("Stale entries found")
       {stale_id, stale_entry} = hd(stale_gets)
       stale_key = stale_entry.key
-      stale_debug = Enum.sort_by(Enum.filter(logs, fn {req_id, log_entry} -> stale_key == log_entry.key && abs(req_id - stale_id) < 100 end), fn {req_id, log_entry} -> log_entry.timestamp end)
+      stale_debug = Enum.sort_by(Enum.filter(logs, fn {req_id, log_entry} -> stale_key == log_entry.key && abs(req_id - stale_id) < 10 end), fn {req_id, log_entry} -> log_entry.timestamp end)
       IO.puts("%% logs of stale gets: #{inspect(stale_gets)}")
       IO.puts("%% logs of objects with stale keys: #{inspect(stale_debug)}")
     end
