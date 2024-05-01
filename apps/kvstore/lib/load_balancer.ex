@@ -62,9 +62,11 @@ defmodule KvStore.LoadBalancer do
         run(%{state | req_id: state.req_id + 1})
       {_, {:node_down, node}} ->
         state = %{state | live_nodes: MapSet.delete(state.live_nodes, node)}
+        send(node, :node_down)
         run(state)
       {_, {:node_up, node}} ->
         state = %{state | live_nodes: MapSet.put(state.live_nodes, node)}
+        send(node, :node_up)
         run(state)
       {sender, :get_live_nodes} ->
         sender |> send(state.live_nodes)
