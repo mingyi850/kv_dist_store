@@ -144,20 +144,20 @@ defmodule TestCase do
     end
   end
 
-  test "rounds=1000__gets=1__puts=1__kvnodes=(3,2,2)__keys=5__clients=3__delay=5" do
+  test "rounds=1000__gets=2__puts=1__kvnodes=(9,5,5)__keys=5__clients=3__delay=0" do
     Emulation.init()
-    Emulation.append_fuzzers([Fuzzers.delay(5)])
+    Emulation.append_fuzzers([Fuzzers.delay(0)])
     Emulation.mark_unfuzzable()
 
     # parameters
     rounds = 1000
-    gets = 1
+    gets = 2
     puts = 1
     keys = 5
-    rep_factor = 3
-    r_quorum = 2
-    w_quorum = 2
-    kv_nodes = [:a, :b, :c]#, :d, :e, :f, :g, :h, :i]
+    rep_factor = 9
+    r_quorum = 5
+    w_quorum = 5
+    kv_nodes = [:a, :b, :c, :d, :e, :f, :g, :h, :i]
     assert rep_factor <= length(kv_nodes)
     clients = [:client_a, :client_b, :client_c]
 
