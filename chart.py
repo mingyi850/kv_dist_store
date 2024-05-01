@@ -110,3 +110,18 @@ fig, ax1 = plt.subplots(figsize=(10, 6))
 # plt.show()
 
 
+# more clients tend to have higher stale rate and more latency
+
+# plt.title('How client amount influence staleness and latency')
+# df_ = df.loc[(df['kv_node'] == 7) & (df['gets'] == 2) & (df['delay'] == 2)]
+# ax1.set_xlabel('Quorum Size')
+# sns.lineplot(x = 'quorum', y = 'stale rate', data = df_.loc[df_['clients'] == 2], ax = ax1, marker = 'o', color = 'red', linewidth = 2)
+# sns.lineplot(x = 'quorum', y = 'stale rate', data = df_.loc[df_['clients'] == 3], ax = ax1, marker = 'o', color = 'orange', linewidth = 2)
+# ax1.set_ylabel('Stale Rate', color = 'red')
+# ax1.tick_params(axis='y', labelcolor='red')
+# ax2 = ax1.twinx()
+# sns.lineplot(x = 'quorum', y = 'latency (get)', data = df_.loc[df_['clients'] == 2], ax = ax2, marker = 'o', color = 'blue', linewidth = 2)
+# sns.lineplot(x = 'quorum', y = 'latency (get)', data = df_.loc[df_['clients'] == 3], ax = ax2, marker = 'o', color = 'navy', linewidth = 2)
+# ax2.set_ylabel('Latency', color = 'blue')
+# ax2.tick_params(axis='y', labelcolor='blue')
+# plt.show()
