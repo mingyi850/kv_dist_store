@@ -98,18 +98,47 @@ defmodule TestCase do
         if length(tail) > 0 do generate_request(load_balancer, observer, tail, context_map) else context_map end
       unknown ->
         Logger.info("client receive unknown msg: #{inspect(unknown)}")
-        context_map
+        if length(tail) > 0 do generate_request(load_balancer, observer, tail, context_map) else context_map end
+    after
+      1000 ->
+        send(:observer, KvStore.ClientTimeoutLog.new(whoami()))
+        if length(tail) > 0 do generate_request(load_balancer, observer, tail, context_map) else context_map end
     end
+
   end
 
-  @spec generate_requests(non_neg_integer(), pid(), pid(), non_neg_integer(), non_neg_integer(), pos_integer(), pos_integer(), %{}) :: nil
-  def generate_requests(round, load_balancer, observer, gets, puts, keys, values, context_map) do
-    Logger.info("generate requests round[#{round}]")
-    requests_list = Enum.shuffle(Enum.map(1..gets, fn _ -> generate_random_get(keys) end) ++ Enum.map(1..puts, fn _ -> generate_random_put(keys, values) end))
+  @spec generate_drop(pid(), pid(), MapSet[pid()], MapSet[pid()], non_neg_integer(), non_neg_integer()) :: MapSet[pid()]
+  def generate_drop(load_balancer, observer, down_nodes, nodes, drop_prob, alive_prob) do
+    dropStat = :rand.uniform()
+    aliveStat = :rand.uniform()
+    liveNodes = MapSet.difference(nodes, down_nodes)
+    new_down_nodes = if dropStat < drop_prob && !Enum.empty?(liveNodes) do
+      Logger.info("generate drop")
+      to_down = Enum.random(liveNodes)
+      send(load_balancer, {:node_down, to_down})
+      MapSet.put(down_nodes, to_down)
+    else
+      down_nodes
+    end
+    new_down_nodes = if aliveStat < alive_prob and !Enum.empty?(down_nodes) do
+      to_up = Enum.random(down_nodes)
+      send(load_balancer, {:node_up, to_up})
+      MapSet.delete(down_nodes, to_up)
+    else
+      down_nodes
+    end
+    new_down_nodes
+  end
 
+  @spec generate_requests(non_neg_integer(), pid(), pid(), non_neg_integer(), non_neg_integer(), pos_integer(), pos_integer(), %{}, [pid()], MapSet[pid()], float(), float()) :: nil
+  def generate_requests(round, load_balancer, observer, gets, puts, keys, values, context_map, nodes, down_nodes, down_prob, up_prob) do
+    Emulation.mark_unfuzzable()
+    Logger.info("generate requests round[#{round}]")
+    #down_nodes = generate_drop(load_balancer, observer, down_nodes, MapSet.new(nodes), down_prob, up_prob)
+    requests_list = Enum.shuffle(Enum.map(1..gets, fn _ -> generate_random_get(keys) end) ++ Enum.map(1..puts, fn _ -> generate_random_put(keys, values) end))
     context_map = generate_request(load_balancer, observer, requests_list, context_map)
 
-    if round - 1 > 0 do generate_requests(round - 1, load_balancer, observer, gets, puts, keys, values, context_map) end
+    if round - 1 > 0 do generate_requests(round - 1, load_balancer, observer, gets, puts, keys, values, context_map, nodes, down_nodes, down_prob, up_prob) end
   end
 
   @spec handle_monitor(pos_integer()) :: nil
@@ -123,9 +152,10 @@ defmodule TestCase do
           client_log = spawn(:client_log, fn ->
             send(:observer, :get_log)
             receive do
-              {_, logs} ->
+              {_, {logs, timeouts}} ->
                 TestCase.latency_stat(logs)
                 TestCase.staleness_stat(logs)
+                IO.puts("%% timeouts: #{timeouts}")
               unknown ->
                 # Logger.debug("client_log receive unknown msg #{inspect(unknown)}")
             end
@@ -144,24 +174,26 @@ defmodule TestCase do
     end
   end
 
-  @tag capture_log: true
+  #@tag capture_log: false
+  @tag timeout: 120000
   test "rounds=1000__gets=2__puts=1__kvnodes=(9,5,5)__keys=5__clients=3__delay=0" do
     Emulation.init()
-    Emulation.append_fuzzers([Fuzzers.delay(0)])
+    Emulation.append_fuzzers([Fuzzers.delay(1), Fuzzers.drop(0.002)])
     Emulation.mark_unfuzzable()
 
     # parameters
-    rounds = 1000
+    rounds = 100
     gets = 2
     puts = 1
     keys = 5
-    rep_factor = 9
-    r_quorum = 5
-    w_quorum = 5
+    rep_factor = 5
+    r_quorum = 3
+    w_quorum = 3
     kv_nodes = [:a, :b, :c, :d, :e, :f, :g, :h, :i]
     assert rep_factor <= length(kv_nodes)
     clients = [:client_a, :client_b, :client_c]
-
+    down_prob = 0.05
+    up_prob = 0.1
     spawn(:observer, fn -> KvStore.Observer.run(KvStore.Observer.init(:observer)) end)
     lb_base_config =
       KvStore.LoadBalancer.init(kv_nodes, rep_factor, :observer)
@@ -179,7 +211,7 @@ defmodule TestCase do
     Enum.each(clients, fn client ->
       Process.monitor(
         spawn(client, fn ->
-          TestCase.generate_requests(rounds, :lb, :observer, gets, puts, keys, 1000, %{})
+          TestCase.generate_requests(rounds, :lb, :observer, gets, puts, keys, 1000, %{}, kv_nodes, MapSet.new(), down_prob, up_prob)
         end)
       )
     end)

@@ -54,7 +54,8 @@ defmodule KvStore.Observer do
 
   defstruct(
     data: %{},
-    log: %{}
+    log: %{},
+    timeouts: 0
   )
 
   @spec init(atom()) :: %KvStore.Observer{}
@@ -62,7 +63,8 @@ defmodule KvStore.Observer do
     Logger.info("Initializing Observer with node: #{inspect(node)}")
     %KvStore.Observer{
       data: %{},
-      log: %{}
+      log: %{},
+      timeouts: 0
     }
   end
 
@@ -90,9 +92,13 @@ defmodule KvStore.Observer do
         state = log_client(state, request)
         # Logger.info("Observer data: #{inspect(state.data)}, log: #{inspect(state.log)}")
         run(state)
+      {_, %KvStore.ClientTimeoutLog{} = request} ->
+        Logger.info("Observer receive timeout #{inspect(request)}")
+        # Logger.info("Observer data: #{inspect(state.data)}, log: #{inspect(state.log)}")
+        run(%{state | timeouts: state.timeouts + 1})
       {sender, :get_log} ->
         Logger.info("Observer send log to #{inspect(sender)}")
-        send(sender, state.log)
+        send(sender, {state.log, state.timeouts})
         run(state)
       unknown ->
         Logger.error("Observer Unknown message received: #{inspect(unknown)}")

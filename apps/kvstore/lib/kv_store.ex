@@ -35,7 +35,7 @@ defmodule KvStore do
     timers: %{},
     counter: 1,
     internal_timeout: 300,
-    max_retries: 3,
+    max_retries: 2,
     heartbeat_counter: 1,
     peer_heartbeats: %{},
     heartbeat_frequency: 500,
@@ -67,7 +67,7 @@ alias KvStore.GetResponse
       alternate_data: %{},
       timers: %{},
       counter: 1,
-      internal_timeout: 100,
+      internal_timeout: 300,
       max_retries: 3,
       heartbeat_counter: 1,
       peer_heartbeats: %{},
@@ -153,6 +153,7 @@ alias KvStore.GetResponse
     Logger.warning("#{inspect(whoami())} Node is down")
     receive do
       {_, :node_up} ->
+        Logger.info("#{inspect(whoami())} Node is up")
         run(state)
       {_, :heartbeat_now} ->
         # Reset heartbeat timer and remain down
@@ -262,7 +263,7 @@ alias KvStore.GetResponse
 
   @spec handle_put_response_quorum(%KvStore{}, %KvStore.InternalPutRequest{}, integer()) :: %KvStore{}
   def handle_put_response_quorum(state, request, index) do
-    # Logger.debug("#{inspect(whoami())} Handling put response quorum for request: #{inspect(request)}")
+     Logger.debug("#{inspect(whoami())} Handling put response quorum for request: #{inspect(request)}")
     responses = Map.get(state.request_responses, index, %{})
     # Logger.debug("Responses for request: #{inspect(responses)}")
     context = hd(Map.values(responses)).context
@@ -271,10 +272,7 @@ alias KvStore.GetResponse
     # send log to observer
     send(state.observer, KvStore.PutRequestLog.new(request.request.req_id, request.request.key, request.request.object, request.context, 0, :os.system_time(:millisecond), whoami()))
 
-    %{state |
-      request_responses: Map.delete(state.request_responses, index),
-      pending_requests: Map.delete(state.pending_requests, index),
-    }
+    state
   end
 
   @spec handle_read_repair(%KvStore{}, %KvStore.ReadRepairRequest{}) :: %KvStore{}
@@ -306,7 +304,7 @@ alias KvStore.GetResponse
 
   @spec handle_get_response_quorum(%KvStore{}, %KvStore.InternalGetRequest{}, integer(), integer()) :: %KvStore{}
   def handle_get_response_quorum(state, request, index, response_count) do
-    # Logger.debug("#{inspect(whoami())} Handling get response quorum for request: #{inspect(request)}")
+     Logger.debug("#{inspect(whoami())} Handling get response quorum for request: #{inspect(request)}")
     if response_count == state.read_quorum do
         responses = Map.get(state.request_responses, index, %{})
         combined_response = KvStore.GetResponse.new(get_updated_responses(responses), request.request.req_id)
@@ -319,8 +317,6 @@ alias KvStore.GetResponse
         send(state.observer, KvStore.GetRequestLog.new(request.request.req_id, request.request.key, combined_response.objects, whoami()))
 
         %{state |
-          request_responses: Map.delete(state.request_responses, index),
-          pending_requests: Map.delete(state.pending_requests, index),
           read_repairs: Map.put(state.read_repairs, index, combined_response)
         }
     else

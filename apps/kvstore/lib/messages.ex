@@ -372,3 +372,18 @@ defmodule KvStore.ClientRequestLog do
   end
 
 end
+
+defmodule KvStore.ClientTimeoutLog do
+
+  defstruct(
+    sender: nil,
+  )
+
+  @spec new(pid()) :: %KvStore.ClientTimeoutLog{}
+  def new(sender) do
+    %KvStore.ClientTimeoutLog{
+      sender: sender
+    }
+  end
+
+end
