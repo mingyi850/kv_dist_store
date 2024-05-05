@@ -126,6 +126,7 @@ alias KvStore.GetResponse
         run(state)
       {_, :node_down} ->
         Logger.warning("#{inspect(whoami())} Node is down")
+        send(state.observer, :node_down)
         down(state)
       {sender, {:heartbeat, new_heartbeats, req_resp}} ->
         state = handle_heartbeat(state, new_heartbeats, sender, req_resp)
@@ -154,6 +155,7 @@ alias KvStore.GetResponse
     receive do
       {_, :node_up} ->
         Logger.info("#{inspect(whoami())} Node is up")
+        send(state.observer, :node_up)
         run(state)
       {_, :heartbeat_now} ->
         # Reset heartbeat timer and remain down

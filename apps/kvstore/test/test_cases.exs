@@ -145,22 +145,25 @@ defmodule TestCase do
     if round - 1 > 0 do generate_requests(round - 1, load_balancer, observer, gets, puts, keys, values, context_map, nodes, new_down_nodes, down_prob, up_prob) end
   end
 
-  @spec handle_monitor(pos_integer()) :: nil
-  def handle_monitor(count) do
+  @spec handle_monitor(pos_integer(), non_neg_integer()) :: nil
+  def handle_monitor(count, start_time) do
     receive do
       {:DOWN, _, _, _, _} ->
         IO.puts("client complete")
         if count - 1 > 0 do
-          handle_monitor(count - 1)
+          handle_monitor(count - 1, start_time)
         else
+          total_time = :os.system_time(:millisecond) - start_time
           client_log = spawn(:client_log, fn ->
             Emulation.mark_unfuzzable()
             send(:observer, :get_log)
             receive do
-              {_, {logs, timeouts}} ->
+              {_, {logs, timeouts, down_times}} ->
                 TestCase.latency_stat(logs)
                 TestCase.staleness_stat(logs)
                 IO.puts("%% timeouts: #{timeouts}")
+                IO.puts("%% node down times: #{inspect(down_times)}")
+                IO.puts("%% down_time %: #{inspect(Map.new(down_times, fn {node, down_time} -> {node, down_time / total_time} end ))}")
               unknown ->
                 # Logger.debug("client_log receive unknown msg #{inspect(unknown)}")
             end
@@ -198,7 +201,7 @@ defmodule TestCase do
     assert rep_factor <= length(kv_nodes)
     clients = [:client_a, :client_b, :client_c]
     down_prob = 0.05
-    up_prob = 0.1
+    up_prob = 0.3
     spawn(:observer, fn -> KvStore.Observer.run(KvStore.Observer.init(:observer)) end)
     lb_base_config =
       KvStore.LoadBalancer.init(kv_nodes, rep_factor, :observer)
@@ -212,7 +215,7 @@ defmodule TestCase do
     Enum.each(kv_nodes, fn node -> spawn(node, fn -> KvStore.run(kv_base_config) end) end)
 
     Logger.info("Spawned all nodes")
-
+    start_time = :os.system_time(:millisecond)
     Enum.each(clients, fn client ->
       Process.monitor(
         spawn(client, fn ->
@@ -221,7 +224,7 @@ defmodule TestCase do
       )
     end)
 
-    TestCase.handle_monitor(length(clients))
+    TestCase.handle_monitor(length(clients), start_time)
 
   after
     Emulation.terminate()

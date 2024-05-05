@@ -55,7 +55,9 @@ defmodule KvStore.Observer do
   defstruct(
     data: %{},
     log: %{},
-    timeouts: 0
+    timeouts: 0,
+    node_down_times: %{},
+    node_downs: %{}
   )
 
   @spec init(atom()) :: %KvStore.Observer{}
@@ -64,7 +66,9 @@ defmodule KvStore.Observer do
     %KvStore.Observer{
       data: %{},
       log: %{},
-      timeouts: 0
+      timeouts: 0,
+      node_down_times: %{},
+      node_downs: %{}
     }
   end
 
@@ -96,13 +100,43 @@ defmodule KvStore.Observer do
         Logger.info("Observer receive timeout #{inspect(request)}")
         # Logger.info("Observer data: #{inspect(state.data)}, log: #{inspect(state.log)}")
         run(%{state | timeouts: state.timeouts + 1})
+      {sender, :node_down} ->
+        Logger.info("Observer receive node_down from #{inspect(sender)}")
+        run(%{state | node_downs: Map.put(state.node_downs, sender, :os.system_time(:millisecond))})
+      {sender, :node_up} ->
+        Logger.info("Observer receive node_up from #{inspect(sender)}")
+        run(handle_node_up(state, sender))
       {sender, :get_log} ->
         Logger.info("Observer send log to #{inspect(sender)}")
-        send(sender, {state.log, state.timeouts})
+        send(sender, {state.log, state.timeouts, collate_downtimes(state)})
         run(state)
       unknown ->
         Logger.error("Observer Unknown message received: #{inspect(unknown)}")
         run(state)
+    end
+  end
+
+  @spec collate_downtimes(%KvStore.Observer{}) :: %{}
+  def collate_downtimes(state) do
+    Logger.info("Collating downtimes")
+    total_state = state.node_downs |> Enum.reduce(state, fn {node, down_time}, state ->
+      handle_node_up(state, node)
+    end)
+    total_state.node_down_times
+  end
+
+  @spec handle_node_up(%KvStore.Observer{}, atom()) :: %KvStore.Observer{}
+  def handle_node_up(state, node) do
+    Logger.info("Observer receive node_up from #{inspect(node)}")
+    previousDownTotal = Map.get(state.node_down_times, node, 0)
+    previousDownTime = Map.get(state.node_downs, node, -1)
+    if previousDownTime == -1 do
+      Logger.error("Node #{inspect(node)} is not down")
+      state
+    else
+      downTime = :os.system_time(:millisecond) - previousDownTime
+      Map.delete(state.node_downs, node)
+      %{state | node_down_times: Map.put(state.node_down_times, node, downTime + previousDownTotal)}
     end
   end
 
