@@ -18,6 +18,10 @@ defmodule KvStore.Utils do
 
   @spec get_next_live_node(integer(), %{sorted_nodes: [atom()], live_nodes: MapSet.t(atom())}, integer()) :: {atom(), integer()}
   def get_next_live_node(index, state, count) do
+    #Logger.debug("Sorted nodes is #{inspect(state.sorted_nodes)}")
+    #Logger.debug("Index is #{index}")
+    #Logger.debug("Count is #{count}")
+    #Logger.debug("Live nodes is #{inspect(state.live_nodes)}")
     if count == 0 do
       {nil, index}
     else
@@ -38,8 +42,12 @@ defmodule KvStore.Utils do
     if num_nodes == 0 do
       Enum.reverse(accum)
     else
-      {next_node, next_index} = get_next_live_node(index, state, MapSet.size(state.live_nodes))
-      get_next_live_nodes(next_index, state, num_nodes - 1, [next_node | accum])
+      {next_node, next_index} = get_next_live_node(index, state, length(state.sorted_nodes) - 1)
+      if next_node == nil or Enum.member?(accum, next_node) do
+        Enum.reverse(accum)
+      else
+        get_next_live_nodes(next_index, state, num_nodes - 1, [next_node | accum])
+      end
     end
   end
 

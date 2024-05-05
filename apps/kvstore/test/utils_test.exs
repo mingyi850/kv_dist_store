@@ -50,6 +50,10 @@ defmodule UtilsTest do
     state = %{state | live_nodes: MapSet.delete(state.live_nodes, :d)}
     assert Utils.get_preference_list("key1", state, 3) == [:a, :c, :b]
     assert Utils.get_preference_list("key3", state, 3) == [:c, :b, :e]
+    state = %{state | live_nodes: MapSet.delete(state.live_nodes, :b)}
+    state = %{state | live_nodes: MapSet.delete(state.live_nodes, :c)}
+    assert Utils.get_preference_list("key1", state, 3) == [:a, :e]
+    assert Utils.get_preference_list("key3", state, 3) == [:e, :a]
   end
 
   test "get previous node" do

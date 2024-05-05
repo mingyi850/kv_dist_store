@@ -42,11 +42,11 @@ defmodule KvStore.LoadBalancer do
     Emulation.mark_unfuzzable()
     receive do
       {sender, {:get, key}} ->
-        Logger.info("lb receive get from #{inspect(sender)} (#{state.req_id})")
+        Logger.info("lb receive get from #{inspect(sender)} (#{state.req_id})}")
         {original_node, _} = consistent_hash(key, state)
         preference_list = get_preference_list(key, state, state.replication_factor)
         node = Enum.random(preference_list)
-        #TODO: Redirect messages to any node in the preference list instead of the first node.
+        Logger.info("lb sending message to #{inspect(node)}, from preference list #{inspect(preference_list)}")
         send(node, KvStore.GetRequest.new(key, sender, original_node, state.req_id))
         # send actual get_timestamp to observer
         send(state.observer, {:get_start_time, state.req_id, :os.system_time(:millisecond)})
@@ -56,6 +56,7 @@ defmodule KvStore.LoadBalancer do
         {original_node, _} = consistent_hash(key, state)
         preference_list = get_preference_list(key, state, state.replication_factor)
         node = Enum.random(preference_list)
+        Logger.info("lb sending message to #{inspect(node)}, from preference list #{inspect(preference_list)}")
         #TODO: Redirect messages to any node in the preference list instead of the first node.
         request = KvStore.PutRequest.new(key, object, context, sender, original_node, state.req_id)
         send(node, request)

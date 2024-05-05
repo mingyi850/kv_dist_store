@@ -111,34 +111,38 @@ defmodule TestCase do
   def generate_drop(load_balancer, observer, down_nodes, nodes, drop_prob, alive_prob) do
     dropStat = :rand.uniform()
     aliveStat = :rand.uniform()
+    IO.puts("dropStat is #{dropStat}")
+    IO.puts("aliveStat is #{aliveStat}")
     liveNodes = MapSet.difference(nodes, down_nodes)
     new_down_nodes = if dropStat < drop_prob && !Enum.empty?(liveNodes) do
-      Logger.info("generate drop")
       to_down = Enum.random(liveNodes)
+      IO.puts("Generating :node_down to #{inspect(to_down)}")
       send(load_balancer, {:node_down, to_down})
       MapSet.put(down_nodes, to_down)
     else
       down_nodes
     end
-    new_down_nodes = if aliveStat < alive_prob and !Enum.empty?(down_nodes) do
+    new_down_nodes_up = if aliveStat < alive_prob and !Enum.empty?(down_nodes) do
       to_up = Enum.random(down_nodes)
+      IO.puts("Generating :node_up to #{inspect(to_up)}")
       send(load_balancer, {:node_up, to_up})
-      MapSet.delete(down_nodes, to_up)
+      MapSet.delete(new_down_nodes, to_up)
     else
-      down_nodes
+      new_down_nodes
     end
-    new_down_nodes
+    new_down_nodes_up
   end
 
   @spec generate_requests(non_neg_integer(), pid(), pid(), non_neg_integer(), non_neg_integer(), pos_integer(), pos_integer(), %{}, [pid()], MapSet[pid()], float(), float()) :: nil
   def generate_requests(round, load_balancer, observer, gets, puts, keys, values, context_map, nodes, down_nodes, down_prob, up_prob) do
     Emulation.mark_unfuzzable()
-    Logger.info("generate requests round[#{round}]")
-    #down_nodes = generate_drop(load_balancer, observer, down_nodes, MapSet.new(nodes), down_prob, up_prob)
+    Logger.info("#{inspect(whoami())} generate requests round[#{round}]")
+    new_down_nodes = generate_drop(load_balancer, observer, down_nodes, MapSet.new(nodes), down_prob, up_prob)
+    Logger.info("#{inspect(whoami())} Got new down nodes as #{inspect(new_down_nodes)}")
     requests_list = Enum.shuffle(Enum.map(1..gets, fn _ -> generate_random_get(keys) end) ++ Enum.map(1..puts, fn _ -> generate_random_put(keys, values) end))
     context_map = generate_request(load_balancer, observer, requests_list, context_map)
 
-    if round - 1 > 0 do generate_requests(round - 1, load_balancer, observer, gets, puts, keys, values, context_map, nodes, down_nodes, down_prob, up_prob) end
+    if round - 1 > 0 do generate_requests(round - 1, load_balancer, observer, gets, puts, keys, values, context_map, nodes, new_down_nodes, down_prob, up_prob) end
   end
 
   @spec handle_monitor(pos_integer()) :: nil
@@ -150,6 +154,7 @@ defmodule TestCase do
           handle_monitor(count - 1)
         else
           client_log = spawn(:client_log, fn ->
+            Emulation.mark_unfuzzable()
             send(:observer, :get_log)
             receive do
               {_, {logs, timeouts}} ->
@@ -182,7 +187,7 @@ defmodule TestCase do
     Emulation.mark_unfuzzable()
 
     # parameters
-    rounds = 100
+    rounds = 1000
     gets = 2
     puts = 1
     keys = 5
