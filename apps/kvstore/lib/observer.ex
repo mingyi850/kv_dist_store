@@ -135,8 +135,7 @@ defmodule KvStore.Observer do
       state
     else
       downTime = :os.system_time(:millisecond) - previousDownTime
-      Map.delete(state.node_downs, node)
-      %{state | node_down_times: Map.put(state.node_down_times, node, downTime + previousDownTotal)}
+      %{state | node_down_times: Map.put(state.node_down_times, node, downTime + previousDownTotal), node_downs: Map.delete(state.node_downs, node)}
     end
   end
 

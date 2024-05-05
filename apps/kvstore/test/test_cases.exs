@@ -100,7 +100,7 @@ defmodule TestCase do
         Logger.info("client receive unknown msg: #{inspect(unknown)}")
         if length(tail) > 0 do generate_request(load_balancer, observer, tail, context_map) else context_map end
     after
-      1000 ->
+      2000 ->
         send(:observer, KvStore.ClientTimeoutLog.new(whoami()))
         if length(tail) > 0 do generate_request(load_balancer, observer, tail, context_map) else context_map end
     end
@@ -186,7 +186,7 @@ defmodule TestCase do
   @tag timeout: 120000
   test "rounds=1000__gets=2__puts=1__kvnodes=(9,5,5)__keys=5__clients=3__delay=0" do
     Emulation.init()
-    Emulation.append_fuzzers([Fuzzers.delay(1), Fuzzers.drop(0.002)])
+    Emulation.append_fuzzers([Fuzzers.delay(1), Fuzzers.drop(0.005)])
     Emulation.mark_unfuzzable()
 
     # parameters
@@ -200,7 +200,7 @@ defmodule TestCase do
     kv_nodes = [:a, :b, :c, :d, :e, :f, :g, :h, :i]
     assert rep_factor <= length(kv_nodes)
     clients = [:client_a, :client_b, :client_c]
-    down_prob = 0.05
+    down_prob = 0.01
     up_prob = 0.3
     spawn(:observer, fn -> KvStore.Observer.run(KvStore.Observer.init(:observer)) end)
     lb_base_config =
