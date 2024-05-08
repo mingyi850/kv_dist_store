@@ -4,169 +4,173 @@ import pandas as pd
 
 
 # df = pd.read_csv("./apps/kvstore/test_results.csv")
-df = pd.read_csv("./DS_project_results.csv")
+df = pd.read_csv("./apps/kvstore/final_test_results.csv")
 
 print(df.head())
 print(df.keys())
 
+# df_ = df.loc[(df['rounds'] == 1000) & (df['gets'] == 1) & (df['puts'] == 1) & (df['keys'] == 5) & 
+#              (df['rep_factor'] == 5) & (df['r_quorum'] == 3) & (df['w_quorum'] == 3) & 
+#              (df['nodes'] == 20) & (df['clients'] == 3) & 
+#              (df['delay'] == 2) & (df['drop'] == 5) & 
+#              (df['down'] == 1) & (df['up'] == 30)]
+# print(df_.head())
+# print(df_.keys())
+
 fig, ax1 = plt.subplots(figsize=(10, 6))
 
 
+# impact of replication factor
 
-plt.title('7 kv nodes, 3 clients (with node drop)')
-df_ = df.loc[(df['kv_node'] == 9) & (df['gets'] == 2) & (df['clients'] == 3) & (df['delay'] == 5)]
-ax1.set_xlabel('Quorum Size')
-sns.lineplot(x = 'quorum', y = 'stale rate', data = df_, ax = ax1, marker = 'o', color = 'red', linewidth = 4)
-ax1.set_ylabel('Stale Rate', color = 'red')
-ax1.tick_params(axis='y', labelcolor='red')
+# plt.title('3 clients (with msg delay, drop, node down)', fontsize=40)
+# df_ = df.loc[(df['rounds'] == 1000) & (df['gets'] == 1) & (df['puts'] == 1) & (df['keys'] == 5) & 
+#              (df['r_quorum'] == 2) & (df['w_quorum'] == 2) & 
+#              (df['nodes'] == 20) & (df['clients'] == 3) & 
+#              (df['delay'] == 2) & (df['drop'] == 5) & 
+#              (df['down'] == 1) & (df['up'] == 30)]
+# print(df_[['rep_factor', 'get_latency', 'put_latency', 'all_latency', 'stale_count', 'stale_rate', 'timeouts']])
+# ax1.set_xlabel('Replication Factor', fontsize=32)
+# ax1.tick_params(axis='x', labelcolor='black', labelsize=16)
+# sns.lineplot(x = 'rep_factor', y = 'stale_rate', data = df_, ax = ax1, label = 'stale rate', marker = 'o', color = 'red', linewidth = 4)
+# ax1.set_ylabel('Stale Rate', color = 'red', fontsize=32)
+# ax1.tick_params(axis='y', labelcolor='red', labelsize=16)
+# ax1.legend(loc='upper left', fontsize=20)
+# ax2 = ax1.twinx()
+# sns.lineplot(x = 'rep_factor', y = 'get_latency', data = df_, ax = ax2, label = 'latency (get)', marker = 'o', color = 'blue', linewidth = 2)
+# sns.lineplot(x = 'rep_factor', y = 'put_latency', data = df_, ax = ax2, label = 'latency (put)', marker = 'o', color = 'lightblue', linewidth = 2)
+# sns.lineplot(x = 'rep_factor', y = 'all_latency', data = df_, ax = ax2, label = 'latency (avg)', marker = 'o', color = 'navy', linewidth = 4)
+# ax2.set_ylabel('Latency', color = 'blue', fontsize=32)
+# ax2.tick_params(axis='y', labelcolor='blue', labelsize=16)
+# ax2.legend(loc='upper right', fontsize=20)
+# plt.show()
+
+
+# impact of quorum size
+
+# plt.title('3 kv nodes, 3 clients (with msg delay, drop, node down)', fontsize=40)
+# df_ = df.loc[(df['rounds'] == 1000) & (df['gets'] == 1) & (df['puts'] == 1) & (df['keys'] == 5) & 
+#              (df['rep_factor'] == 3) & #(df['r_quorum'] == df['w_quorum']) & 
+#              (df['nodes'] == 20) & (df['clients'] == 3) & 
+#              (df['delay'] == 2) & (df['drop'] == 5) & 
+#              (df['down'] == 1) & (df['up'] == 30)]
+# df_['quorum_sum'] = df_['r_quorum'] + df_['w_quorum']
+# df_['quorum_size'] = df_['r_quorum'].astype(str) + ',' + df_['w_quorum'].astype(str)
+# df_ = df_.sort_values('quorum_sum')
+# # print(df_[['r_quorum', 'w_quorum', 'quorum_size', 'stale_rate', 'all_latency']].head())
+# ax1.set_xlabel('Quorum Size (read,write)', fontsize=32)
+# ax1.tick_params(axis='x', labelcolor='black', labelsize=16)
+# sns.lineplot(x = 'quorum_size', y = 'stale_rate', data = df_, ax = ax1, label = 'stale rate', marker = 'o', color = 'red', linewidth = 4)
+# ax1.set_ylabel('Stale Rate', color = 'red', fontsize=32)
+# ax1.tick_params(axis='y', labelcolor='red', labelsize=16)
+# ax1.legend(loc='upper left', fontsize=20)
+# ax2 = ax1.twinx()
+# sns.lineplot(x = 'quorum_size', y = 'get_latency', data = df_, ax = ax2, label = 'latency (get)', marker = 'o', color = 'blue', linewidth = 2)
+# sns.lineplot(x = 'quorum_size', y = 'put_latency', data = df_, ax = ax2, label = 'latency (put)', marker = 'o', color = 'lightblue', linewidth = 2)
+# sns.lineplot(x = 'quorum_size', y = 'all_latency', data = df_, ax = ax2, label = 'latency (avg)', marker = 'o', color = 'navy', linewidth = 4)
+# ax2.set_ylabel('Latency', color = 'blue', fontsize=32)
+# ax2.tick_params(axis='y', labelcolor='blue', labelsize=16)
+# ax2.legend(loc='upper right', fontsize=20)
+# plt.show()
+
+
+# impact of node down/up
+
+plt.title('7 kv nodes, quorum = (2,2), 3 clients (with msg delay, drop)', fontsize=40)
+df_ = df.loc[(df['rounds'] == 1000) & (df['gets'] == 1) & (df['puts'] == 1) & (df['keys'] == 5) & 
+             (df['rep_factor'] == 7) & (df['r_quorum'] == 2) & (df['w_quorum'] == 2) & 
+             (df['nodes'] == 20) & (df['clients'] == 3) & 
+             (df['delay'] == 2) & (df['drop'] == 5)
+            ]
+print(df_[['down', 'up', 'get_latency', 'put_latency', 'all_latency', 'stale_count', 'stale_rate', 'timeouts', 'avg_down']])
+df_ = df_.sort_values('down')
+df_['down_up'] = df_['down'].astype(str) + ',' + df_['up'].astype(str)
+ax1.set_xlabel('Probability of Node Down/Up (%)', fontsize=32)
+ax1.tick_params(axis='x', labelcolor='black', labelsize=16)
+sns.lineplot(x = 'down_up', y = 'stale_rate', data = df_, ax = ax1, label = 'stale rate', marker = 'o', color = 'red', linewidth = 4)
+ax1.set_ylabel('Stale Rate', color = 'red', fontsize=32)
+ax1.tick_params(axis='y', labelcolor='red', labelsize=16)
+ax1.legend(loc='upper left', fontsize=20)
 ax2 = ax1.twinx()
-sns.lineplot(x = 'quorum', y = 'latency (get)', data = df_, ax = ax2, marker = 'o', color = 'blue', linewidth = 2)
-sns.lineplot(x = 'quorum', y = 'latency (put)', data = df_, ax = ax2, marker = 'o', color = 'navy', linewidth = 2)
-ax2.set_ylabel('Latency', color = 'blue')
-ax2.tick_params(axis='y', labelcolor='blue')
+# sns.lineplot(x = 'down_up', y = 'get_latency', data = df_, ax = ax2, label = 'latency (get)', marker = 'o', color = 'blue', linewidth = 2)
+# sns.lineplot(x = 'down_up', y = 'put_latency', data = df_, ax = ax2, label = 'latency (put)', marker = 'o', color = 'lightblue', linewidth = 2)
+sns.lineplot(x = 'down_up', y = 'all_latency', data = df_, ax = ax2, label = 'latency (avg)', marker = 'o', color = 'navy', linewidth = 4)
+sns.lineplot(x = 'down_up', y = 'avg_down', data = df_, ax = ax2, label = 'node down time (avg)', marker = 'o', color = 'green', linewidth = 4)
+ax2.set_ylabel('Time', color = 'blue', fontsize=32)
+ax2.tick_params(axis='y', labelcolor='blue', labelsize=16)
+ax2.legend(loc='upper right', fontsize=20)
 plt.show()
 
 
-# how quorum size influence staleness and latency
+# impact of clients number
 
-# plt.title('3 kv nodes, 3 clients, delay 2 millisec')
-# df_ = df.loc[(df['kv_node'] == 3) & (df['rep_factor'] == 3) & (df['gets'] == 2) & (df['clients'] == 3) & (df['delay'] == 2)]
-# ax1.set_xlabel('Quorum Size')
-# sns.lineplot(x = 'r_quorum', y = 'stale rate', data = df_, ax = ax1, marker = 'o', color = 'red', linewidth = 4)
-# ax1.set_ylabel('Stale Rate', color = 'red')
-# ax1.tick_params(axis='y', labelcolor='red')
+# plt.title('5 kv nodes, quorum = (2,2) (with msg delay, drop, node down)', fontsize=40)
+# df_ = df.loc[(df['rounds'] == 1000) & (df['gets'] == 1) & (df['puts'] == 1) & (df['keys'] == 5) & 
+#              (df['rep_factor'] == 5) & (df['r_quorum'] == 2) &  (df['w_quorum'] == 2) & 
+#              (df['nodes'] == 20) & 
+#              (df['delay'] == 2) & (df['drop'] == 5) & 
+#              (df['down'] == 1) & (df['up'] == 30)]
+# print(df_[['clients', 'get_latency', 'put_latency', 'all_latency', 'stale_count', 'stale_rate']])
+# ax1.set_xlabel('Number of Client', fontsize=32)
+# ax1.tick_params(axis='x', labelcolor='black', labelsize=16)
+# sns.lineplot(x = 'clients', y = 'stale_rate', data = df_, ax = ax1, label = 'stale rate', marker = 'o', color = 'red', linewidth = 4)
+# ax1.set_ylabel('Stale Rate', color = 'red', fontsize=32)
+# ax1.tick_params(axis='y', labelcolor='red', labelsize=16)
+# ax1.legend(loc='upper left', fontsize=20)
 # ax2 = ax1.twinx()
-# sns.lineplot(x = 'r_quorum', y = 'latency (get)', data = df_, ax = ax2, marker = 'o', color = 'blue', linewidth = 2)
-# sns.lineplot(x = 'r_quorum', y = 'latency (put)', data = df_, ax = ax2, marker = 'o', color = 'navy', linewidth = 2)
-# ax2.set_ylabel('Latency', color = 'blue')
-# ax2.tick_params(axis='y', labelcolor='blue')
+# sns.lineplot(x = 'clients', y = 'get_latency', data = df_, ax = ax2, label = 'latency (get)', marker = 'o', color = 'blue', linewidth = 2)
+# sns.lineplot(x = 'clients', y = 'put_latency', data = df_, ax = ax2, label = 'latency (put)', marker = 'o', color = 'lightblue', linewidth = 2)
+# sns.lineplot(x = 'clients', y = 'all_latency', data = df_, ax = ax2, label = 'latency (avg)', marker = 'o', color = 'navy', linewidth = 4)
+# ax2.set_ylabel('Latency', color = 'blue', fontsize=32)
+# ax2.tick_params(axis='y', labelcolor='blue', labelsize=16)
+# ax2.legend(loc='upper right', fontsize=20)
 # plt.show()
 
 
-# plt.title('5 kv nodes, 3 clients, delay 2 millisec')
-# df_ = df.loc[(df['kv_node'] == 5) & (df['rep_factor'] == 5) & (df['gets'] == 2) & (df['clients'] == 3) & (df['delay'] == 2)]
-# ax1.set_xlabel('Quorum Size')
-# sns.lineplot(x = 'r_quorum', y = 'stale rate', data = df_, ax = ax1, marker = 'o', color = 'red', linewidth = 4)
-# ax1.set_ylabel('Stale Rate', color = 'red')
-# ax1.tick_params(axis='y', labelcolor='red')
+# impact of message drop
+
+# plt.title('5 kv nodes, quorum = (2,2), 3 clients (with msg delay, node down)', fontsize=40)
+# df_ = df.loc[(df['rounds'] == 1000) & (df['gets'] == 1) & (df['puts'] == 1) & (df['keys'] == 5) & 
+#              (df['rep_factor'] == 5) & (df['r_quorum'] == 2) & (df['w_quorum'] == 2) & 
+#              (df['nodes'] == 20) & (df['clients'] == 3) & 
+#              (df['delay'] == 2) & 
+#              (df['down'] == 1) & (df['up'] == 30)]
+# print(df_[['drop', 'get_latency', 'put_latency', 'all_latency', 'stale_count', 'stale_rate', 'timeouts']])
+# ax1.set_xlabel('Message Drop Rate (1/1000)', fontsize=32)
+# ax1.tick_params(axis='x', labelcolor='black', labelsize=16)
+# sns.lineplot(x = 'drop', y = 'stale_rate', data = df_, ax = ax1, label = 'stale rate', marker = 'o', color = 'red', linewidth = 4)
+# ax1.set_ylabel('Stale Rate', color = 'red', fontsize=32)
+# ax1.tick_params(axis='y', labelcolor='red', labelsize=16)
+# ax1.legend(loc='upper left', fontsize=20)
 # ax2 = ax1.twinx()
-# sns.lineplot(x = 'r_quorum', y = 'latency (get)', data = df_, ax = ax2, marker = 'o', color = 'blue', linewidth = 2)
-# sns.lineplot(x = 'r_quorum', y = 'latency (put)', data = df_, ax = ax2, marker = 'o', color = 'navy', linewidth = 2)
-# ax2.set_ylabel('Latency', color = 'blue')
-# ax2.tick_params(axis='y', labelcolor='blue')
+# sns.lineplot(x = 'drop', y = 'get_latency', data = df_, ax = ax2, label = 'latency (get)', marker = 'o', color = 'blue', linewidth = 2)
+# sns.lineplot(x = 'drop', y = 'put_latency', data = df_, ax = ax2, label = 'latency (put)', marker = 'o', color = 'lightblue', linewidth = 2)
+# sns.lineplot(x = 'drop', y = 'all_latency', data = df_, ax = ax2, label = 'latency (avg)', marker = 'o', color = 'navy', linewidth = 4)
+# ax2.set_ylabel('Latency', color = 'blue', fontsize=32)
+# ax2.tick_params(axis='y', labelcolor='blue', labelsize=16)
+# ax2.legend(loc='upper right', fontsize=20)
 # plt.show()
 
 
-# plt.title('7 kv nodes, 3 clients, delay 2 millisec')
-# df_ = df.loc[(df['kv_node'] == 7) & (df['rep_factor'] == 7) & (df['gets'] == 2) & (df['clients'] == 3) & (df['delay'] == 2)]
-# ax1.set_xlabel('Quorum Size')
-# sns.lineplot(x = 'r_quorum', y = 'stale rate', data = df_, ax = ax1, marker = 'o', color = 'red', linewidth = 4)
-# ax1.set_ylabel('Stale Rate', color = 'red')
-# ax1.tick_params(axis='y', labelcolor='red')
+# impact of messge delay
+
+# plt.title('5 kv nodes, quorum = (2,2), 3 clients (with msg drop, node down)', fontsize=40)
+# df_ = df.loc[(df['rounds'] == 1000) & (df['gets'] == 1) & (df['puts'] == 1) & (df['keys'] == 5) & 
+#              (df['rep_factor'] == 5) & (df['r_quorum'] == 2) & (df['w_quorum'] == 2) & 
+#              (df['nodes'] == 20) & (df['clients'] == 3) & 
+#              (df['drop'] == 5) & 
+#              (df['down'] == 1) & (df['up'] == 30)]
+# print(df_[['delay', 'get_latency', 'put_latency', 'all_latency', 'stale_count', 'stale_rate', 'timeouts']])
+# ax1.set_xlabel('Message Delay', fontsize=32)
+# ax1.tick_params(axis='x', labelcolor='black', labelsize=16)
+# sns.lineplot(x = 'delay', y = 'stale_rate', data = df_, ax = ax1, label = 'stale rate', marker = 'o', color = 'red', linewidth = 4)
+# ax1.set_ylabel('Stale Rate', color = 'red', fontsize=32)
+# ax1.tick_params(axis='y', labelcolor='red', labelsize=16)
+# ax1.legend(loc='upper left', fontsize=20)
 # ax2 = ax1.twinx()
-# sns.lineplot(x = 'r_quorum', y = 'latency (get)', data = df_, ax = ax2, marker = 'o', color = 'blue', linewidth = 2)
-# sns.lineplot(x = 'r_quorum', y = 'latency (put)', data = df_, ax = ax2, marker = 'o', color = 'navy', linewidth = 2)
-# ax2.set_ylabel('Latency', color = 'blue')
-# ax2.tick_params(axis='y', labelcolor='blue')
-# plt.show()
-
-
-# plt.title('9 kv nodes, 3 clients, delay 2 millisec')
-# df_ = df.loc[(df['kv_node'] == 9) & (df['rep_factor'] == 9) & (df['gets'] == 2) & (df['clients'] == 3) & (df['delay'] == 2)]
-# ax1.set_xlabel('Quorum Size')
-# sns.lineplot(x = 'r_quorum', y = 'stale rate', data = df_, ax = ax1, marker = 'o', color = 'red', linewidth = 4)
-# ax1.set_ylabel('Stale Rate', color = 'red')
-# ax1.tick_params(axis='y', labelcolor='red')
-# ax2 = ax1.twinx()
-# sns.lineplot(x = 'r_quorum', y = 'latency (get)', data = df_, ax = ax2, marker = 'o', color = 'blue', linewidth = 2)
-# sns.lineplot(x = 'r_quorum', y = 'latency (put)', data = df_, ax = ax2, marker = 'o', color = 'navy', linewidth = 2)
-# ax2.set_ylabel('Latency', color = 'blue')
-# ax2.tick_params(axis='y', labelcolor='blue')
-# plt.show()
-
-
-# how delay time influence staleness and latency
-
-# plt.title('3 kv nodes, quorum size = 2, 3 clients')
-# df_ = df.loc[(df['kv_node'] == 3) & (df['gets'] == 2) & (df['clients'] == 3) & (df['quorum'] == 2)]
-# ax1.set_xlabel('Delay Time')
-# sns.lineplot(x = 'delay', y = 'stale rate', data = df_, ax = ax1, marker = 'o', color = 'red', linewidth = 4)
-# ax1.set_ylabel('Stale Rate', color = 'red')
-# ax1.tick_params(axis='y', labelcolor='red')
-# ax2 = ax1.twinx()
-# sns.lineplot(x = 'delay', y = 'latency (get)', data = df_, ax = ax2, marker = 'o', color = 'blue', linewidth = 2)
-# sns.lineplot(x = 'delay', y = 'latency (put)', data = df_, ax = ax2, marker = 'o', color = 'navy', linewidth = 2)
-# ax2.set_ylabel('Latency', color = 'blue')
-# ax2.tick_params(axis='y', labelcolor='blue')
-# plt.show()
-
-
-# plt.title('5 kv nodes, quorum size = 3, 3 clients')
-# df_ = df.loc[(df['kv_node'] == 5) & (df['gets'] == 2) & (df['clients'] == 3) & (df['r_quorum'] == 3) & (df['rep_factor'] == 5)]
-# ax1.set_xlabel('Delay Time')
-# sns.lineplot(x = 'delay', y = 'stale rate', data = df_, ax = ax1, marker = 'o', color = 'red', linewidth = 4)
-# ax1.set_ylabel('Stale Rate', color = 'red')
-# ax1.tick_params(axis='y', labelcolor='red')
-# ax2 = ax1.twinx()
-# sns.lineplot(x = 'delay', y = 'latency (get)', data = df_, ax = ax2, marker = 'o', color = 'blue', linewidth = 2)
-# sns.lineplot(x = 'delay', y = 'latency (put)', data = df_, ax = ax2, marker = 'o', color = 'navy', linewidth = 2)
-# ax2.set_ylabel('Latency', color = 'blue')
-# ax2.tick_params(axis='y', labelcolor='blue')
-# plt.show()
-
-
-# plt.title('7 kv nodes, quorum size = 4, 3 clients')
-# df_ = df.loc[(df['kv_node'] == 7) & (df['gets'] == 2) & (df['clients'] == 3) & (df['quorum'] == 4)]
-# ax1.set_xlabel('Delay Time')
-# sns.lineplot(x = 'delay', y = 'stale rate', data = df_, ax = ax1, marker = 'o', color = 'red', linewidth = 4)
-# ax1.set_ylabel('Stale Rate', color = 'red')
-# ax1.tick_params(axis='y', labelcolor='red')
-# ax2 = ax1.twinx()
-# sns.lineplot(x = 'delay', y = 'latency (get)', data = df_, ax = ax2, marker = 'o', color = 'blue', linewidth = 2)
-# sns.lineplot(x = 'delay', y = 'latency (put)', data = df_, ax = ax2, marker = 'o', color = 'navy', linewidth = 2)
-# ax2.set_ylabel('Latency', color = 'blue')
-# ax2.tick_params(axis='y', labelcolor='blue')
-# plt.show()
-
-
-# plt.title('9 kv nodes, quorum size = 5, 3 clients')
-# df_ = df.loc[(df['kv_node'] == 9) & (df['gets'] == 2) & (df['clients'] == 3) & (df['quorum'] == 5)]
-# ax1.set_xlabel('Delay Time')
-# sns.lineplot(x = 'delay', y = 'stale rate', data = df_, ax = ax1, marker = 'o', color = 'red', linewidth = 4)
-# ax1.set_ylabel('Stale Rate', color = 'red')
-# ax1.tick_params(axis='y', labelcolor='red')
-# ax2 = ax1.twinx()
-# sns.lineplot(x = 'delay', y = 'latency (get)', data = df_, ax = ax2, marker = 'o', color = 'blue', linewidth = 2)
-# sns.lineplot(x = 'delay', y = 'latency (put)', data = df_, ax = ax2, marker = 'o', color = 'navy', linewidth = 2)
-# ax2.set_ylabel('Latency', color = 'blue')
-# ax2.tick_params(axis='y', labelcolor='blue')
-# plt.show()
-
-
-
-# plt.title('How kv node amount influence latency')
-# df_ = df.loc[(df['gets'] == 2) & (df['clients'] == 3)]
-# ax1.set_xlabel('KV Nodes')
-# sns.lineplot(x = 'kv_node', y = 'latency (get)', data = df_.loc[df_['delay'] == 0], ax = ax1, marker = 'o', color = 'lightblue', linewidth = 2)
-# sns.lineplot(x = 'kv_node', y = 'latency (get)', data = df_.loc[df_['delay'] == 2], ax = ax1, marker = 'o', color = 'blue', linewidth = 2)
-# # sns.lineplot(x = 'kv_node', y = 'latency (get)', data = df_.loc[df_['delay'] == 5], ax = ax1, marker = 'o', color = 'navy', linewidth = 2)
-# ax1.set_ylabel('Latency', color = 'blue')
-# ax1.tick_params(axis='y', labelcolor='blue')
-# plt.show()
-
-
-# more clients tend to have higher stale rate and more latency
-
-# plt.title('How client amount influence staleness and latency')
-# df_ = df.loc[(df['kv_node'] == 5) & (df['rep_factor'] == 5) & (df['gets'] == 2) & (df['delay'] == 2)]
-# ax1.set_xlabel('Quorum Size')
-# sns.lineplot(x = 'r_quorum', y = 'stale rate', data = df_.loc[df_['clients'] == 2], ax = ax1, label = 'client=2', marker = 'o', color = 'red', linewidth = 2)
-# sns.lineplot(x = 'r_quorum', y = 'stale rate', data = df_.loc[df_['clients'] == 3], ax = ax1, label = 'client=3', marker = 'o', color = 'orange', linewidth = 2)
-# ax1.set_ylabel('Stale Rate', color = 'red')
-# ax1.tick_params(axis='y', labelcolor='red')
-# ax2 = ax1.twinx()
-# sns.lineplot(x = 'r_quorum', y = 'latency (get)', data = df_.loc[df_['clients'] == 2], ax = ax2, label = 'client=2', marker = 'o', color = 'blue', linewidth = 2)
-# sns.lineplot(x = 'r_quorum', y = 'latency (get)', data = df_.loc[df_['clients'] == 3], ax = ax2, label = 'client=3', marker = 'o', color = 'navy', linewidth = 2)
-# ax2.set_ylabel('Latency', color = 'blue')
-# ax2.tick_params(axis='y', labelcolor='blue')
+# sns.lineplot(x = 'delay', y = 'get_latency', data = df_, ax = ax2, label = 'latency (get)', marker = 'o', color = 'blue', linewidth = 2)
+# sns.lineplot(x = 'delay', y = 'put_latency', data = df_, ax = ax2, label = 'latency (put)', marker = 'o', color = 'lightblue', linewidth = 2)
+# sns.lineplot(x = 'delay', y = 'all_latency', data = df_, ax = ax2, label = 'latency (avg)', marker = 'o', color = 'navy', linewidth = 4)
+# ax2.set_ylabel('Latency', color = 'blue', fontsize=32)
+# ax2.tick_params(axis='y', labelcolor='blue', labelsize=16)
+# ax2.legend(loc='upper right', fontsize=20)
 # plt.show()
